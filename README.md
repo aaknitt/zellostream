@@ -13,3 +13,11 @@ For Zello consumer network:
 - Copy the Private Key into a file called privatekey.pem that's in the same folder as the script.
 - The Issuer value goes into config.json.
 
+## config.json
+- username:  Zello account username to use for streaming
+- password:  Zello account password to use for streaming
+- zello_channel:  name of the zello channel to stream to
+- issuer:  Issuer credential from Zello account (see above)
+- vox_silence_time:  Time in seconds of detected silence before streaming stops
+- audio_threshold:  Audio detected above this level will be streamed
+- input_device_index:  Index of the audio input device to use for streaming
