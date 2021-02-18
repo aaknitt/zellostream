@@ -29,6 +29,9 @@ On Windows, requires these DLL files in the same directory:
 - libgcc_s_sjlj-1.dll
 These can be obtained from the 'opusfile' download at http://opus-codec.org/downloads/
 
+Requires websocket_client:
+https://pypi.org/project/websocket_client/
+
 Requires pyaudio:
 https://people.csail.mit.edu/hubert/pyaudio/
 
