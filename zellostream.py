@@ -157,10 +157,10 @@ def stop_stream(ws,stream_id):
 start_time = time.time()
 packet_id = 0
 
+enc = opuslib.api.encoder.create_state(RATE,CHANNELS,opuslib.APPLICATION_AUDIO)
 while True:
 	data = record(.06)
 	max_audio_level = max(abs(data))
-	enc = opuslib.api.encoder.create_state(RATE,CHANNELS,opuslib.APPLICATION_AUDIO)
 	if max_audio_level > audio_threshold:
 		zello_ws = create_zello_connection()
 		stream_id = start_stream(zello_ws)
