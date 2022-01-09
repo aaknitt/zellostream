@@ -1,7 +1,7 @@
 # zellostream
 Python scripts to stream audio one way to a Zello channel.  Designed for Python 3.X
 
-Two scripts are provided.  zellostream.py acquires audio from a sound card to send to Zello.  zellostreamUDP.py acquires audio from a UDP socket (intended for use with trunk-recorder and the simplstream plugin).  
+Two scripts are provided.  zellostream.py acquires audio from a sound card to send to Zello.  zellostreamUDP.py acquires audio from a UDP socket (intended for use with trunk-recorder and the [simplestream plugin](https://github.com/robotastic/trunk-recorder/blob/master/docs/CONFIGURE.md#simplestream-plugin)).  
 
 Create a developer account with Zello to get credentials.  Set up a different account than what you normally use for Zello, as trying to use this script with the same account that you're using on your mobile device will cause problems.  
 
@@ -41,7 +41,7 @@ Requires pyaudio:
 https://people.csail.mit.edu/hubert/pyaudio/
 
 ## Using zellostreamUDP.py with trunk-recorder
-The simplstream plugin of trunk-recorder can be be used to send audio from trunk-recorder in real time, as it is being recorded.  zellostreamUDP.py can receive this audio and stream it to Zello with low latency.  
+The [simplestream plugin](https://github.com/robotastic/trunk-recorder/blob/master/docs/CONFIGURE.md#simplestream-plugin) of trunk-recorder can be be used to send audio from trunk-recorder in real time, as it is being recorded.  zellostreamUDP.py can receive this audio and stream it to Zello with low latency.  
 
 zellostreamUDP.py sends audio to zello in the order recieved via UDP packets with no mixing or delays.  Therefore, only a single talkgroup should be sent to Zello using this method.  If audio from more than one talkgroup is sent and both are active at the same time, the audio from the two talkgroups will be interleaved and unintelligible.  
 
