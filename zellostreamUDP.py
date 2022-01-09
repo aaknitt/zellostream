@@ -18,12 +18,7 @@ These can be obtained from the 'opusfile' download at http://opus-codec.org/down
 
 
 
-# Set up a UDP server to receive audio from trunk-recorder
-UDPSock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-UDPSock.settimeout(.5)
 
-listen_addr = ("",UDP_PORT)
-UDPSock.bind(listen_addr)
 
 f = open('privatekey.pem','r')
 key = RSA.import_key(f.read())
@@ -72,6 +67,13 @@ try:
 	UDP_PORT = configdata['UDP_PORT']  #UDP port to listen for incoming uncompressed audio
 except:
 	UDP_PORT = 9123
+	
+# Set up a UDP server to receive audio from trunk-recorder
+UDPSock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+UDPSock.settimeout(.5)
+
+listen_addr = ("",UDP_PORT)
+UDPSock.bind(listen_addr)
 
 def create_zello_jwt():
 	#Create a Zello-specific JWT.  Can't use PyJWT because Zello doesn't support url safe base64 encoding in the JWT.
