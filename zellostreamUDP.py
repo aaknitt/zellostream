@@ -67,6 +67,10 @@ try:
 	UDP_PORT = configdata['UDP_PORT']  #UDP port to listen for incoming uncompressed audio
 except:
 	UDP_PORT = 9123
+try:
+	audio_sample_rate = configdata['audio_sample_rate']
+except:
+	audio_sample_rate = 8000
 	
 # Set up a UDP server to receive audio from trunk-recorder
 UDPSock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
@@ -126,7 +130,10 @@ def start_stream(ws):
 	#gD4BPA==  => 0x80 0x3e 0x01 0x3C  => 16000 Hz, 1 frame per packet, 60 ms frame size
 	#gD4CPA==  => 0x80 0x3e 0x02 0x3C  => 16000 Hz, 2 frames per packet, 60 ms frame size
 	#QB8BPA==  => 0x40 0x1f 0x01 0x3C  => 8000 Hz, 1 frame per packet, 60 ms frame size
-	send['codec_header'] = "QB8BPA=="
+	if audio_sample_rate == 16000:
+		send['codec_header'] = "gD4BPA=="
+	else:
+		send['codec_header'] = "QB8BPA=="
 	send['packet_duration'] = 60
 	ws.send(json.dumps(send))
 	data = {}
@@ -150,24 +157,25 @@ def stop_stream(ws,stream_id):
 
 start_time = time.time()
 packet_id = 0
-RATE=8000
 CHANNELS = 1
-enc = opuslib.api.encoder.create_state(RATE,CHANNELS,opuslib.APPLICATION_AUDIO)
+enc = opuslib.api.encoder.create_state(audio_sample_rate,CHANNELS,opuslib.APPLICATION_AUDIO)
 stream_id = 0
 quiet_samples = 0
+bytes_per_60ms = .06*audio_sample_rate*2  #.06 seconds * 8000 samples per second * 2 bytes per sample => 960 bytes per 60 ms
 while True:
 	try:
 		udpdata,addr = UDPSock.recvfrom(4096)  
+		#print("Got data from ",addr)
 		if TGID_in_stream:
 			tgid = int.from_bytes(udpdata[0:4],"little")
+			#print(tgid," ",len(udpdata))
 			if tgid == TGID_to_play:
-				print(tgid," ",len(udpdata))
 				udpdata = udpdata[4:]
 			else:
 				udpdata = []
-		while len(udpdata)>=960:  #.06 seconds * 8000 samples per second * 2 bytes per sample => 960 bytes per 60 ms
-			data = udpdata[:960]  #960 bytes = 60 ms
-			udpdata = udpdata[960:]
+		while len(udpdata)>=bytes_per_60ms:  
+			data = udpdata[:bytes_per_60ms]  
+			udpdata = udpdata[bytes_per_60ms:]
 			datalist  = frombuffer(data, dtype='uint16')
 			max_audio_level = max(abs(datalist))
 			if max_audio_level > audio_threshold or stream_id != 0:
@@ -177,7 +185,7 @@ while True:
 					print("sending to stream_id " + str(stream_id))
 					quiet_samples = 0
 				while (quiet_samples < (vox_silence_time*(1/.06))):
-					out = opuslib.api.encoder.encode(enc, data, 480, len(data)*2)  #480 samples per 60 ms (2 bytes per sample)
+					out = opuslib.api.encoder.encode(enc, data, bytes_per_60ms/2, len(data)*2)  #2 bytes per sample
 					#print(len(out))
 					send_data = bytearray(array([1]).astype('>u1').tobytes())
 					send_data = send_data + array([stream_id]).astype('>u4').tobytes()
@@ -187,10 +195,10 @@ while True:
 						zello_ws.send_binary(send_data)
 					except:
 						break
-					data = udpdata[:960]  #960 bytes = 60 ms
-					udpdata = udpdata[960:]
+					data = udpdata[:bytes_per_60ms] 
+					udpdata = udpdata[bytes_per_60ms:]
 					#print("remaining udpdata size is ",len(udpdata)," bytes")
-					if len(data) == 960:
+					if len(data) == bytes_per_60ms:
 						datalist = frombuffer(data, dtype='uint16')
 						if abs(max(datalist)) < audio_threshold:
 							quiet_samples = quiet_samples+1
