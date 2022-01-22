@@ -2,7 +2,7 @@ import websocket
 import socket
 import json
 import time
-from numpy import short, frombuffer, array
+from numpy import short, frombuffer, array, dtype
 import opuslib
 from Crypto.PublicKey import RSA
 from Crypto.Signature import pkcs1_15
@@ -161,11 +161,14 @@ CHANNELS = 1
 enc = opuslib.api.encoder.create_state(audio_sample_rate,CHANNELS,opuslib.APPLICATION_AUDIO)
 stream_id = 0
 quiet_samples = 0
-bytes_per_60ms = .06*audio_sample_rate*2  #.06 seconds * 8000 samples per second * 2 bytes per sample => 960 bytes per 60 ms
+bytes_per_60ms = int(.06*audio_sample_rate*2)  #.06 seconds * 8000 samples per second * 2 bytes per sample => 960 bytes per 60 ms
+print("bytes_per_60ms: ",bytes_per_60ms)
+udpdata = b''
 while True:
 	try:
-		udpdata,addr = UDPSock.recvfrom(4096)  
-		#print("Got data from ",addr)
+		newdata,addr = UDPSock.recvfrom(4096)
+		udpdata = udpdata + newdata
+		print("Got ",len(udpdata)," bytes from ",addr)
 		if TGID_in_stream:
 			tgid = int.from_bytes(udpdata[0:4],"little")
 			#print(tgid," ",len(udpdata))
@@ -176,36 +179,21 @@ while True:
 		while len(udpdata)>=bytes_per_60ms:  
 			data = udpdata[:bytes_per_60ms]  
 			udpdata = udpdata[bytes_per_60ms:]
-			datalist  = frombuffer(data, dtype='uint16')
-			max_audio_level = max(abs(datalist))
-			if max_audio_level > audio_threshold or stream_id != 0:
-				if stream_id == 0:
-					zello_ws = create_zello_connection()
-					stream_id = start_stream(zello_ws)
-					print("sending to stream_id " + str(stream_id))
-					quiet_samples = 0
-				while (quiet_samples < (vox_silence_time*(1/.06))):
-					out = opuslib.api.encoder.encode(enc, data, bytes_per_60ms/2, len(data)*2)  #2 bytes per sample
-					#print(len(out))
-					send_data = bytearray(array([1]).astype('>u1').tobytes())
-					send_data = send_data + array([stream_id]).astype('>u4').tobytes()
-					send_data = send_data + array([packet_id]).astype('>u4').tobytes()  #packet ID is only used in server to client - populate with zeros for client to server direction
-					send_data = send_data + out
-					try:
-						zello_ws.send_binary(send_data)
-					except:
-						break
-					data = udpdata[:bytes_per_60ms] 
-					udpdata = udpdata[bytes_per_60ms:]
-					#print("remaining udpdata size is ",len(udpdata)," bytes")
-					if len(data) == bytes_per_60ms:
-						datalist = frombuffer(data, dtype='uint16')
-						if abs(max(datalist)) < audio_threshold:
-							quiet_samples = quiet_samples+1
-						else:
-							quiet_samples = 0
-					else:
-						break
+			if stream_id == 0:
+				zello_ws = create_zello_connection()
+				stream_id = start_stream(zello_ws)
+				print("sending to stream_id " + str(stream_id))
+			out = opuslib.api.encoder.encode(enc, data, int(bytes_per_60ms/2), len(data)*2)  #2 bytes per sample
+			#print(len(out))
+			send_data = bytearray(array([1]).astype('>u1').tobytes())
+			send_data = send_data + array([stream_id]).astype('>u4').tobytes()
+			send_data = send_data + array([packet_id]).astype('>u4').tobytes()  #packet ID is only used in server to client - populate with zeros for client to server direction
+			send_data = send_data + out
+			try:
+				zello_ws.send_binary(send_data)
+			except:
+				break
+			#print("remaining udpdata size is ",len(udpdata)," bytes")
 	except socket.timeout:
 		if stream_id != 0:
 			print("Done sending audio")
