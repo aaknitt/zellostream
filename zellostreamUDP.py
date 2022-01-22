@@ -175,7 +175,7 @@ while True:
 			if tgid == TGID_to_play:
 				udpdata = udpdata[4:]
 			else:
-				udpdata = []
+				udpdata = b''
 		while len(udpdata)>=bytes_per_60ms:  
 			data = udpdata[:bytes_per_60ms]  
 			udpdata = udpdata[bytes_per_60ms:]
