@@ -167,15 +167,15 @@ udpdata = b''
 while True:
 	try:
 		newdata,addr = UDPSock.recvfrom(4096)
-		udpdata = udpdata + newdata
-		print("Got ",len(udpdata)," bytes from ",addr)
+		print("Got ",len(newdata)," bytes from ",addr)
 		if TGID_in_stream:
 			tgid = int.from_bytes(udpdata[0:4],"little")
 			#print(tgid," ",len(udpdata))
 			if tgid == TGID_to_play:
-				udpdata = udpdata[4:]
+				newdata = newdata[4:]
 			else:
-				udpdata = b''
+				newdata = b''
+		udpdata = udpdata + newdata
 		while len(udpdata)>=bytes_per_60ms:  
 			data = udpdata[:bytes_per_60ms]  
 			udpdata = udpdata[bytes_per_60ms:]
