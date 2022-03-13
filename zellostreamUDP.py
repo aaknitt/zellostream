@@ -59,14 +59,17 @@ try:
 	TGID_in_stream = configdata['TGID_in_stream']  #When set to True, we expect a 4 byte long int with the TGID prior to the audio in each packet
 except:
 	TGID_in_stream = False
+print("TGID_in_stream is ",TGID_in_stream)
 try:
 	TGID_to_play = configdata['TGID_to_play']  #When TGID_in_stream is set to True, we'll only play audio if the received TGID matches this value
 except:
 	TGID_to_play = 70000
+print("TGID_to_play is ",TGID_to_play)
 try:
 	UDP_PORT = configdata['UDP_PORT']  #UDP port to listen for incoming uncompressed audio
 except:
 	UDP_PORT = 9123
+print("UDP_PORT is ",UDP_PORT)
 try:
 	audio_sample_rate = configdata['audio_sample_rate']
 except:
@@ -167,15 +170,18 @@ udpdata = b''
 while True:
 	try:
 		newdata,addr = UDPSock.recvfrom(4096)
-		print("Got ",len(newdata)," bytes from ",addr)
+		
 		if TGID_in_stream:
-			tgid = int.from_bytes(udpdata[0:4],"little")
-			#print(tgid," ",len(udpdata))
+			tgid = int.from_bytes(newdata[0:4],"little")
+			print("Got ",len(newdata)," bytes from ",addr, " for TGID ",tgid)
 			if tgid == TGID_to_play:
 				newdata = newdata[4:]
 			else:
 				newdata = b''
+		else:
+			print("Got ",len(newdata)," bytes from ",addr)
 		udpdata = udpdata + newdata
+		
 		while len(udpdata)>=bytes_per_60ms:  
 			data = udpdata[:bytes_per_60ms]  
 			udpdata = udpdata[bytes_per_60ms:]
