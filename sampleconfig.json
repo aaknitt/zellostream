@@ -1,13 +1,15 @@
 {
-"username":"my_username",
-"password":"my_password",
-"zello_channel":"My_Channel",
-"issuer":"WkM6YWFrbml0dDI6MQ==.nABE/ksSAMPLEDATAHEREj6IXyUCvPisYkDAzaqeMA/WE=",
-"vox_silence_time":2,
-"audio_threshold":700,
-"input_device_index":0,
-"TGID_in_stream": true,
-"TGID_to_play": 58917,
-"UDP_PORT": 9123,
-"audio_sample_rate":8000
+    "username": "my_username",
+    "password": "my_password",
+    "zello_channel": "My_Channel",
+    "issuer": "WkM6YWFrbml0dDI6MQ==.nABE/ksSAMPLEDATAHEREj6IXyUCvPisYkDAzaqeMA/WE=",
+    "vox_silence_time": 2,
+    "audio_threshold": 700,
+    "input_device_index": 0,
+    "TGID_in_stream": true,
+    "TGID_to_play": 58917,
+    "UDP_PORT": 9123,
+    "audio_sample_rate": 8000,
+    "zello_sample_rate": 16000,
+    "in_channel_config": "left"
 }
