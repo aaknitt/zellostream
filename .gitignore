@@ -1,0 +1,4 @@
+core*
+config.json
+venv/
+.vscode/
