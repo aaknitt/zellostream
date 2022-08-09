@@ -27,8 +27,9 @@ For Zello consumer network:
 - TGID_to_play: When TGID_in_stream is set to true, the integer in this field specifies which talkgroup ID will be streamed (only used in zellostreamUDP.py). Default 70000
 - UDP_PORT: UDP port to listen for oncompressed PCM audio on.  Audio received on this port will be compressed and streamed to Zello (only used in zeelostreamUDP.py). Default 9123
 - audio_sample_rate: Sample rate of the audio device (samples per seconds). Default: 48000
+- audio_channels: Number of audio channels in the device. 1 for mono, 2 for stereo. Default 1
 - zello_sample_rate: Sample rate of the stream sent to Zello (samples per seconds). Default: 16000
-- in_channel_config: Channel to send. "mono" for mono device. "left" or "right" for stereo device. Default: mono
+- in_channel_config: Channel to send. "mono" for mono device. "left", "right" or "mix" for stereo device. Default: mono
 
 ## Dependencies
 On Windows, requires these DLL files in the same directory:
