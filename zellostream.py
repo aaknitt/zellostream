@@ -10,6 +10,10 @@ from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
 import base64
 
+print("Importing librosa...")
+import librosa
+print("Imported librosa")
+
 """On Windows, requires these DLL files in the same directory:
 opus.dll (renamed from libopus-0.dll)
 libwinpthread-1.dll
@@ -55,7 +59,7 @@ def get_config():
     config["input_device_index"] = configdata.get("input_device_index", 0)
     config["audio_sample_rate"] = configdata.get("audio_sample_rate", 48000)
     config["audio_channels"] = configdata.get("audio_channels", 1)
-    config["zello_sample_rate"] = configdata.get("audio_sample_rate", 16000)
+    config["zello_sample_rate"] = configdata.get("zello_sample_rate", 16000)
     return config
 
 
@@ -104,7 +108,7 @@ def record(config, stream, seconds, channel="mono"):
         alldata.extend(data)
     data = np.frombuffer(alldata, dtype=np.short)
     if config["audio_sample_rate"] != config["zello_sample_rate"]:
-        zello_data = librosa.resample(data, config["audio_sample_rate"], config["zello_sample_rate"])
+        zello_data = librosa.resample(data.astype(np.float32), orig_sr=config["audio_sample_rate"], target_sr=config["zello_sample_rate"]).astype(np.short)
     else:
         zello_data = data
     if channel == "left":
@@ -220,9 +224,6 @@ def main():
         print(f"Configuration error: {ex}")
         sys.exit(1)
 
-    print("Importing librosa...")
-    import librosa
-    print("Imported librosa")
     print("Start PyAudio")
     p = pyaudio.PyAudio()
     print("Started PyAudio")
