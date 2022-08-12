@@ -127,15 +127,15 @@ def record(config, stream, seconds, channel="mono"):
         zello_data = zello_data
     return zello_data
 
-def udp_rx(sock):
+def udp_rx(sock,config):
     global udpdata
     while processing:
         try:
             newdata,addr = sock.recvfrom(4096)
-            if TGID_in_stream:
+            if config['TGID_in_stream']:
                 tgid = int.from_bytes(newdata[0:4],"little")
                 print("Got ",len(newdata)," bytes from ",addr, " for TGID ",tgid)
-                if tgid == TGID_to_play:
+                if tgid == config['TGID_to_play']:
                     newdata = newdata[4:]
                 else:
                     newdata = b''
@@ -289,7 +289,7 @@ def main():
         UDPSock.settimeout(.5)
         listen_addr = ("",config["udp_port"])
         UDPSock.bind(listen_addr)
-        udp_rx_thread = Thread(target=udp_rx,args=(UDPSock,))
+        udp_rx_thread = Thread(target=udp_rx,args=(UDPSock,config))
         udp_rx_thread.start()
         udp_buffer_lock = Lock()
     else:
