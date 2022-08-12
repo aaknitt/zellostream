@@ -10,6 +10,10 @@ from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
 import base64
 
+print("Importing librosa...")
+import librosa
+print("Imported librosa")
+
 """On Windows, requires these DLL files in the same directory:
 opus.dll (renamed from libopus-0.dll)
 libwinpthread-1.dll
@@ -55,7 +59,7 @@ def get_config():
     config["input_device_index"] = configdata.get("input_device_index", 0)
     config["audio_sample_rate"] = configdata.get("audio_sample_rate", 48000)
     config["audio_channels"] = configdata.get("audio_channels", 1)
-    config["zello_sample_rate"] = configdata.get("audio_sample_rate", 16000)
+    config["zello_sample_rate"] = configdata.get("zello_sample_rate", 16000)
     return config
 
 
@@ -104,7 +108,7 @@ def record(config, stream, seconds, channel="mono"):
         alldata.extend(data)
     data = np.frombuffer(alldata, dtype=np.short)
     if config["audio_sample_rate"] != config["zello_sample_rate"]:
-        zello_data = librosa.resample(data, config["audio_sample_rate"], config["zello_sample_rate"])
+        zello_data = librosa.resample(data.astype(np.float32), orig_sr=config["audio_sample_rate"], target_sr=config["zello_sample_rate"]).astype(np.short)
     else:
         zello_data = data
     if channel == "left":
@@ -220,9 +224,6 @@ def main():
         print(f"Configuration error: {ex}")
         sys.exit(1)
 
-    print("Importing librosa...")
-    import librosa
-    print("Imported librosa")
     print("Start PyAudio")
     p = pyaudio.PyAudio()
     print("Started PyAudio")
@@ -232,19 +233,21 @@ def main():
 
     stream_id = None
     processing = True
+    zello_ws = None
 
     while processing:
         try:
             data = record(config, audio_stream, seconds=0.06, channel=config["in_channel_config"])
             max_audio_level = max(abs(data))
-            # print(f"Init max_audio_level: {max_audio_level}")
-            if max_audio_level > config["audio_threshold"]:
+            if max_audio_level > config["audio_threshold"]: # Start sending to channel
                 print("Audio on")
-                zello_ws = create_zello_connection(config)
-                if not zello_ws:
-                    print("Cannot establish connection")
-                    time.sleep(1)
-                    continue
+                if not zello_ws or not zello_ws.connected:
+                    zello_ws = create_zello_connection(config)
+                    if not zello_ws:
+                        print("Cannot establish connection")
+                        time.sleep(1)
+                        continue
+                zello_ws.settimeout(1)
                 stream_id = start_stream(config, zello_ws)
                 if not stream_id:
                     print("Cannot start stream")
@@ -285,18 +288,33 @@ def main():
                         quiet_samples = 0
                 print("Done sending audio")
                 stop_stream(zello_ws, stream_id)
-                zello_ws.close()
                 stream_id = None
+            else: # Monitor channel for incoming traffic
+                if not zello_ws or not zello_ws.connected:
+                    zello_ws = create_zello_connection(config)
+                    if not zello_ws:
+                        print("Cannot establish connection")
+                        time.sleep(1)
+                        continue
+                try:
+                    zello_ws.settimeout(0.05)
+                    result = zello_ws.recv()
+                    print(f"Recv: {result}")
+                    data = json.loads(result)
+                    # TODO: look for on_stream_start command to receive audio stream
+                except Exception as ex:
+                    pass
         except KeyboardInterrupt:
             print("Keyboard interrupt caught")
             if stream_id:
                 print("Stop sending audio")
                 stop_stream(zello_ws, stream_id)
-                zello_ws.close()
                 stream_id = None
             processing = False
 
     print("Terminating")
+    if zello_ws:
+        zello_ws.close()
     audio_stream.close()
     p.terminate()
 
