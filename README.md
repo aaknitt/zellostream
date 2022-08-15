@@ -40,6 +40,7 @@ For Zello consumer network:
 - ptt_on_command: Optional command to execute to turn host PTT on when receiving audio from Zello. It is in the form of a list of command followed by its arguments
 - ptt_off_command: Optional command to execute to turn host PTT off when audio from Zello has finished. It is in the form of a list of command followed by its arguments
 - ptt_off_delay: Delay in seconds applied before sending the PTT off command. Covers possible delay to play the stream entirely. Default 2 seconds.
+- logging_level: Set Python logging module to this level. Can be "critial", "error", "warning", "info" or "debug". Default "warning".
 - TGID_in_stream: When true, a four-byte talkgroup ID is expected prior to the audio data in each incoming UDP packet and only the talkgroup specified in TGID_to_play will be streamed.  Default is false.  (only used in zellostreamUDP.py).
 - TGID_to_play: When TGID_in_stream is set to true, the integer in this field specifies which talkgroup ID will be streamed (only used in zellostreamUDP.py). Default 70000
 - UDP_PORT: UDP port to listen for oncompressed PCM audio on.  Audio received on this port will be compressed and streamed to Zello (only used in zeelostreamUDP.py). Default 9123
