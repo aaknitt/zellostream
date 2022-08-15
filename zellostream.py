@@ -1,4 +1,5 @@
 import sys
+import subprocess
 import websocket
 import socket
 import json
@@ -71,6 +72,10 @@ def get_config():
     config["audio_output_volume"] = configdata.get("audio_output_volume", 1)
     config["in_channel_config"] = configdata.get("in_channel", "mono")
     config["audio_source"] = configdata.get("audio_source","sound_card")
+    config["ptt_on_command"] = configdata.get("ptt_on_command")
+    config["ptt_off_command"] = configdata.get("ptt_off_command")
+    config["ptt_off_delay"] =  configdata.get("ptt_off_delay", 2)
+    config["ptt_command_support"] = not (config["ptt_on_command"] is None or config["ptt_off_command"] is None)
     config["udp_port"] = configdata.get("UDP_PORT",9123)
     config["tgid_in_stream"] = configdata.get("TGID_in_stream",False)
     config["tgid_to_play"] = configdata.get("TGID_to_play",70000)
@@ -342,6 +347,14 @@ def bytes_to_uint32(bytes):
     return bytes[0]*(1<<24) + bytes[1]*(1<<16) + bytes[2]*(1<<8) + bytes[3]
 
 
+def run_ptt_command(msg, command_list, delay):
+    command = " ".join(command_list)
+    print(f"run_ptt_command: {command} after {delay} seconds")
+    time.sleep(delay)
+    run_command = subprocess.run(command, shell=True)
+    print(f"run_ptt_command: {msg} exited with code {run_command.returncode}")
+
+
 def stream_to_zello(config, zello_ws, audio_input_stream, data):
     try:
         stream_id = start_stream(config, zello_ws)
@@ -412,6 +425,8 @@ def stream_from_zello(config, zello_ws, audio_output_stream, start_data):
     zello_chunk = (sample_rate * packet_duration) // 1000
     dec = create_decoder(sample_rate)
     print(f"stream_from_zello: start of bytes stream: sample_rate: {sample_rate} frames_per_buffer: {frames_per_buffer} frame_duration: {frame_duration} packet_duration: {packet_duration}")
+    if config["ptt_command_support"]:
+        run_ptt_command("PTT on", config["ptt_on_command"], 0)
     while True:
         try:
             received = zello_ws.recv()
@@ -433,9 +448,13 @@ def stream_from_zello(config, zello_ws, audio_output_stream, start_data):
                         audio_output_stream.write(np_audio.astype(np.short).toBytes())
             else:
                 print("stream_from_zello: end of bytes stream")
+                if config["ptt_command_support"]:
+                    run_ptt_command("PTT off", config["ptt_off_command"], config["ptt_off_delay"])
                 return # can only be an on_stream_stop if not binary
         except Exception as ex:
             print(f"stream_from_zello: exception: {ex}")
+            if config["ptt_command_support"]:
+                run_ptt_command("PTT off", config["ptt_off_command"], config["ptt_off_delay"])
             return
 
 
