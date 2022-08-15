@@ -16,6 +16,8 @@ print("Importing librosa...")
 import librosa
 print("Imported librosa")
 
+from pulseaudio import PulseAudioHandler
+
 """On Windows, requires these DLL files in the same directory:
 opus.dll (renamed from libopus-0.dll)
 libwinpthread-1.dll
@@ -47,8 +49,6 @@ def get_config():
     if not password:
         raise ConfigException("ERROR GETTING PASSWORD FROM CONFIG FILE")
     config["password"] = password
-    config["vox_silence_time"] = configdata.get("vox_silence_time", 3)
-    config["in_channel_config"] = configdata.get("in_channel", "mono")
     issuer = configdata.get("issuer")
     if not issuer:
         raise ConfigException("ERROR GETTING ZELLO ISSUER ID FROM CONFIG FILE")
@@ -57,11 +57,19 @@ def get_config():
     if not zello_channel:
         raise ConfigException("ERROR GETTING ZELLO CHANNEL NAME FROM CONFIG FILE")
     config["zello_channel"] = zello_channel
+    config["vox_silence_time"] = configdata.get("vox_silence_time", 3)
     config["audio_threshold"] = configdata.get("audio_threshold", 1000)
     config["input_device_index"] = configdata.get("input_device_index", 0)
-    config["audio_sample_rate"] = configdata.get("audio_sample_rate", 48000)
-    config["audio_channels"] = configdata.get("audio_channels", 1)
-    config["zello_sample_rate"] = configdata.get("zello_sample_rate", 16000)
+    config["input_pulse_name"] = configdata.get("input_pulse_name")
+    config["output_device_index"] = configdata.get("output_device_index", 0)
+    config["output_pulse_name"] = configdata.get("output_pulse_name")
+    config["audio_input_sample_rate"] = configdata.get("audio_input_sample_rate", 48000)
+    config["audio_input_channels"] = configdata.get("audio_input_channels", 1)
+    config["zello_input_sample_rate"] = configdata.get("zello_input_sample_rate", 16000)
+    config["audio_output_sample_rate"] = configdata.get("audio_output_sample_rate", 48000)
+    config["audio_output_channels"] = configdata.get("audio_output_channels", 1)
+    config["audio_output_volume"] = configdata.get("audio_output_volume", 1)
+    config["in_channel_config"] = configdata.get("in_channel", "mono")
     config["audio_source"] = configdata.get("audio_source","sound_card")
     config["udp_port"] = configdata.get("UDP_PORT",9123)
     config["tgid_in_stream"] = configdata.get("TGID_in_stream",False)
@@ -89,32 +97,95 @@ def EscapeAll(inbytes):
         return "b'{}'".format("".join("\\x{:02x}".format(b) for b in inbytes))
 
 
+def get_default_input_audio_index(config, p):
+    info = p.get_host_api_info_by_index(0)
+    numdevices = info.get('deviceCount')
+    output_device_names={}
+    for i in range (0,numdevices):
+        if p.get_device_info_by_host_api_device_index(0,i).get('maxOutputChannels')>0:
+            device_info = p.get_device_info_by_host_api_device_index(0,i)
+            output_device_names[device_info["name"]] = device_info["index"]
+    return output_device_names.get("default", config["output_device_index"])
+
+
+def get_default_output_audio_index(config, p):
+    info = p.get_host_api_info_by_index(0)
+    numdevices = info.get('deviceCount')
+    input_device_names={}
+    for i in range (0,numdevices):
+        if p.get_device_info_by_host_api_device_index(0,i).get('maxInputChannels')>0:
+            device_info = p.get_device_info_by_host_api_device_index(0,i)
+            input_device_names[device_info["name"]] = device_info["index"]
+    return input_device_names.get("default", config["input_device_index"])
+
+
 def start_audio(config, p):
-    audio_chunk = int(config["audio_sample_rate"] * 0.06)  # 60ms = 960 samples @ 16000 S/s
+    audio_chunk = int(config["audio_input_sample_rate"] * 0.06)  # 60ms = 960 samples @ 16000 S/s
     format = pyaudio.paInt16
     print("start_audio: open audio")
-    stream = p.open(
+    if "input_pulse_name" in config or "output_pulse_name" in config: # using pulseaudio
+        pulse = PulseAudioHandler()
+    # Audio input
+    if "input_pulse_name" in config: # using pulseaudio for input
+        input_device_index = get_default_input_audio_index(config, p) # get default device first
+    else: # use pyaudio device number
+        input_device_index = config["input_device_index"]
+    input_stream = p.open(
         format=format,
-        channels=config["audio_channels"],
-        rate=config["audio_sample_rate"],
+        channels=config["audio_input_channels"],
+        rate=config["audio_input_sample_rate"],
         input=True,
-        output=True,
         frames_per_buffer=audio_chunk,
-        input_device_index=config["input_device_index"],
+        input_device_index=input_device_index,
     )
     print("start_audio: audio opened")
-    return stream
+    if "input_pulse_name" in config: # redirect input to zellostream with pulseaudio
+        pulse_source_index = pulse.get_source_index(config["input_pulse_name"])
+        pulse_source_output_index = pulse.get_own_source_output_index()
+        if pulse_source_index is None or pulse_source_output_index is None:
+            print(f"start_audio: cannot move source output {pulse_source_output_index} to source {pulse_source_index}")
+        else:
+            try:
+                pulse.move_source_output(pulse_source_output_index, pulse_source_index)
+                print(f"start_audio: moved pulseaudio source output {pulse_source_output_index} to source {pulse_source_index}")
+            except Exception as ex:
+                print(f"start_audio: exception assigning pulseaudio source: {ex}")
+    # Audio outpput
+    if "output_pulse_name" in config: # using pulseaudio for output
+        output_device_index = get_default_output_audio_index(config, p)
+    else: # use pyaudio device number
+        output_device_index = config["output_device_index"]
+    output_stream = p.open(
+        format=format,
+        channels=config["audio_output_channels"],
+        rate=config["audio_output_sample_rate"],
+        output=True,
+        frames_per_buffer=audio_chunk,
+        output_device_index=output_device_index,
+    )
+    print("start_audio: audio output opened")
+    if "output_pulse_name" in config: # redirect output from zellostream with pulseaudio
+        pulse_sink_index = pulse.get_sink_index(config["output_pulse_name"])
+        pulse_sink_input_index = pulse.get_own_sink_input_index()
+        if pulse_sink_index is None or pulse_sink_input_index is None:
+            print(f"start_audio: cannot move pulseaudio sink input {pulse_sink_input_index} to sink {pulse_sink_index}")
+        else:
+            try:
+                pulse.move_sink_input(pulse_sink_input_index, pulse_sink_index)
+                print(f"start_audio: moved pulseaudio sink input {pulse_sink_input_index} to sink {pulse_sink_index}")
+            except Exception as ex:
+                print(f"start_audio: exception assigning pulseaudio sink: {ex}")
+    return input_stream, output_stream
 
 
-def record(config, stream, seconds, channel="mono"):
+def record_chunk(config, stream, channel="mono"):
+    audio_chunk = int(config["audio_input_sample_rate"] * 0.06)
     alldata = bytearray()
-    audio_chunk = int(config["audio_sample_rate"] * 0.06)
-    for i in range(0, int(config["audio_sample_rate"] / audio_chunk * seconds)):
-        data = stream.read(audio_chunk)
-        alldata.extend(data)
+    data = stream.read(audio_chunk)
+    alldata.extend(data)
     data = np.frombuffer(alldata, dtype=np.short)
-    if config["audio_sample_rate"] != config["zello_sample_rate"]:
-        zello_data = librosa.resample(data.astype(np.float32), orig_sr=config["audio_sample_rate"], target_sr=config["zello_sample_rate"]).astype(np.short)
+    if config["audio_input_sample_rate"] != config["zello_input_sample_rate"]:
+        zello_data = librosa.resample(data.astype(np.float32), orig_sr=config["audio_input_sample_rate"], target_sr=config["zello_input_sample_rate"]).astype(np.short)
     else:
         zello_data = data
     if channel == "left":
@@ -148,14 +219,14 @@ def udp_rx(sock,config):
 
 def get_udp_audio(config,seconds,channel="mono"):
     global udpdata,udp_buffer_lock
-    num_bytes = int(seconds*config["audio_sample_rate"]*2)  #.06 seconds * 8000 samples per second * 2 bytes per sample => 960 bytes per 60 ms
+    num_bytes = int(seconds*config["audio_input_sample_rate"]*2)  #.06 seconds * 8000 samples per second * 2 bytes per sample => 960 bytes per 60 ms
     if channel != "mono":
         num_bytes = num_bytes *2
-    with udp_buffer_lock: 
+    with udp_buffer_lock:
         data = np.frombuffer(udpdata[:num_bytes], dtype=np.short)
         udpdata = udpdata[num_bytes:]
-    if config["audio_sample_rate"] != config["zello_sample_rate"]:
-        zello_data = librosa.resample(data.astype(np.float32), orig_sr=config["audio_sample_rate"], target_sr=config["zello_sample_rate"]).astype(np.short)
+    if config["audio_input_sample_rate"] != config["zello_input_sample_rate"]:
+        zello_data = librosa.resample(data.astype(np.float32), orig_sr=config["audio_input_sample_rate"], target_sr=config["zello_input_sample_rate"]).astype(np.short)
     else:
         zello_data = data
     if channel == "left":
@@ -209,7 +280,7 @@ def start_stream(config, ws):
     frames_per_packet = 1
     packet_duration = 60
     codec_header = base64.b64encode(
-        config["zello_sample_rate"].to_bytes(2, "little") + frames_per_packet.to_bytes(1, "big") + packet_duration.to_bytes(1, "big")
+        config["zello_input_sample_rate"].to_bytes(2, "little") + frames_per_packet.to_bytes(1, "big") + packet_duration.to_bytes(1, "big")
     ).decode()
     send["codec_header"] = codec_header
     send["packet_duration"] = packet_duration
@@ -260,7 +331,53 @@ def stop_stream(ws, stream_id):
 
 
 def create_encoder(config):
-    return opuslib.api.encoder.create_state(config["zello_sample_rate"], config["audio_channels"], opuslib.APPLICATION_AUDIO)
+    return opuslib.api.encoder.create_state(config["zello_input_sample_rate"], config["audio_input_channels"], opuslib.APPLICATION_AUDIO)
+
+
+def create_decoder(sample_rate):
+    return opuslib.api.decoder.create_state(sample_rate, 1)
+
+
+def bytes_to_uint32(bytes):
+    return bytes[0]*(1<<24) + bytes[1]*(1<<16) + bytes[2]*(1<<8) + bytes[3]
+
+
+def stream_from_zello(config, zello_ws, audio_output_stream, start_data):
+    if "codec_header" not in start_data:
+        return
+    packet_duration = start_data.get("packet_duration", 0)
+    b64x = base64.b64decode(start_data["codec_header"])
+    sample_rate = b64x[1]*256 + b64x[0]
+    frames_per_buffer = b64x[2]
+    frame_duration = b64x[3]
+    zello_chunk = (sample_rate * packet_duration) // 1000
+    dec = create_decoder(sample_rate)
+    print(f"stream_from_zello: start of bytes stream: sample_rate: {sample_rate} frames_per_buffer: {frames_per_buffer} frame_duration: {frame_duration} packet_duration: {packet_duration}")
+    while True:
+        try:
+            received = zello_ws.recv()
+            if type(received) == bytes:
+                if received[0] == 1: # audio
+                    stream_id = bytes_to_uint32(received[1:5])
+                    packet_id = bytes_to_uint32(received[5:9])
+                    data_length = len(received) - 9
+                    data = received[9:]
+                    # print(f"stream_from_zello: {stream_id}:{packet_id} data length: {data_length}")
+                    audio = opuslib.api.decoder.decode(dec, data, data_length, zello_chunk, False, 1)
+                    # print(f"stream_from_zello: audio length: {len(audio)}")
+                    vol_adjust = config["audio_output_volume"] / config["audio_output_channels"]
+                    np_audio = np.repeat(np.frombuffer(audio, dtype=np.short), config["audio_output_channels"]) * vol_adjust
+                    if sample_rate != config["audio_output_sample_rate"]:
+                        audio_out = librosa.resample(np_audio.astype(np.float32), orig_sr=sample_rate, target_sr=config["audio_output_sample_rate"]).astype(np.short)
+                        audio_output_stream.write(audio_out.tobytes())
+                    else:
+                        audio_output_stream.write(np_audio.astype(np.short).toBytes())
+            else:
+                print("stream_from_zello: end of bytes stream")
+                return # can only be an on_stream_stop if not binary
+        except Exception as ex:
+            print(f"stream_from_zello: exception: {ex}")
+            return
 
 
 def main():
@@ -276,13 +393,13 @@ def main():
         print(f"Configuration error: {ex}")
         sys.exit(1)
 
-    zello_chunk = int(config["zello_sample_rate"] * 0.06)
+    zello_chunk = int(config["zello_input_sample_rate"] * 0.06)
 
     if config["audio_source"] == "sound_card":
         print("Start PyAudio")
         p = pyaudio.PyAudio()
         print("Started PyAudio")
-        audio_stream = start_audio(config, p)
+        audio_input_stream, audio_output_stream = start_audio(config, p)
     elif config["audio_source"] == "UDP":
         # Set up a UDP server to receive audio from trunk-recorder
         UDPSock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
@@ -302,7 +419,7 @@ def main():
     while processing:
         try:
             if config["audio_source"] == "sound_card":
-                data = record(config, audio_stream, seconds=0.06, channel=config["in_channel_config"])
+                data = record_chunk(config, audio_input_stream, channel=config["in_channel_config"])
             elif config["audio_source"] == "UDP":
                 data = get_udp_audio(config,seconds=0.06, channel=config["in_channel_config"])
             else:
@@ -354,7 +471,7 @@ def main():
                             print(f"Zello error {ex}")
                             break
                     if config["audio_source"] == "sound_card":
-                        data = record(config, audio_stream, seconds=0.06, channel=config["in_channel_config"])
+                        data = record_chunk(config, audio_input_stream, channel=config["in_channel_config"])
                     elif config["audio_source"] == "UDP":
                         data = get_udp_audio(config,seconds=0.06, channel=config["in_channel_config"])
                     else:
@@ -382,7 +499,9 @@ def main():
                     result = zello_ws.recv()
                     print(f"Recv: {result}")
                     data = json.loads(result)
-                    # TODO: look for on_stream_start command to receive audio stream
+                    if "command" in data and data["command"] == "on_stream_start" : # look for on_stream_start command to receive audio stream
+                        zello_ws.settimeout(1)
+                        stream_from_zello(config, zello_ws, audio_output_stream, data)
                 except Exception as ex:
                     pass
         except KeyboardInterrupt:
@@ -397,12 +516,13 @@ def main():
     if zello_ws:
         zello_ws.close()
     if config["audio_source"] == "sound_card":
-        audio_stream.close()
+        audio_input_stream.close()
+        audio_output_stream.close()
         p.terminate()
     elif config["audio_source"] == "UDP":
         time.sleep(1)
         UDPSock.close()
-    
+
 
 
 if __name__ == "__main__":

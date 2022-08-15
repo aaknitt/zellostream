@@ -22,14 +22,24 @@ For Zello consumer network:
 - issuer:  Issuer credential from Zello account (see above)
 - vox_silence_time:  Time in seconds of detected silence before streaming stops. Default: 3
 - audio_threshold:  Audio detected above this level will be streamed. Default: 1000
-- input_device_index:  Index of the audio input device to use for streaming (not used in zellostreamUDP.py). Use list_devices.py to find the right index. Default 0
+- input_device_index:  Index of the audio input device to use for streaming to Zello (not used in zellostreamUDP.py). Default 0
+  - Use list_devies_portaudio.py to find the right index.
+- output_device_index:  Index of the audio output device to use for streaming from Zello (not used in zellostreamUDP.py). Default 0
+  - Use list_devies_portaudio.py to find the right index.
+- zello_input_sample_rate: Sample rate of the stream sent to Zello (samples per seconds). Default: 16000
+- audio_input_sample_rate: Sample rate of the audio device (samples per seconds). Default: 48000
+- audio_input_channels: Number of audio channels in the device. 1 for mono, 2 for stereo. Default 1
+- input_pulse_name: Used to re-route input from a Pulseaudio device. This is the name of the device
+  - Use list_devices_pulseaudio.py to find the right device name
+- in_channel_config: Channel to send. "mono" for mono device. "left", "right" or "mix" for stereo device. Default: mono
+- audio_output_sample_rate: Sample rate of the output audio device (samples per seconds). Default: 48000
+- audio_output_channels: Number of audio channels in the output device. 1 for mono, 2 for stereo. Default 1
+- output_pulse_name: Used to re-route output to a Pulseaudio device. This is the name of the device
+  - Use list_devices_pulseaudio.py to find the right device name
+- audio_source: Choose between "sound_card" and "UDP". Default "sound_card"
 - TGID_in_stream: When true, a four-byte talkgroup ID is expected prior to the audio data in each incoming UDP packet and only the talkgroup specified in TGID_to_play will be streamed.  Default is false.  (only used in zellostreamUDP.py).
 - TGID_to_play: When TGID_in_stream is set to true, the integer in this field specifies which talkgroup ID will be streamed (only used in zellostreamUDP.py). Default 70000
 - UDP_PORT: UDP port to listen for oncompressed PCM audio on.  Audio received on this port will be compressed and streamed to Zello (only used in zeelostreamUDP.py). Default 9123
-- audio_sample_rate: Sample rate of the audio device (samples per seconds). Default: 48000
-- audio_channels: Number of audio channels in the device. 1 for mono, 2 for stereo. Default 1
-- zello_sample_rate: Sample rate of the stream sent to Zello (samples per seconds). Default: 16000
-- in_channel_config: Channel to send. "mono" for mono device. "left", "right" or "mix" for stereo device. Default: mono
 
 ## Dependencies
 On Windows, requires these DLL files in the same directory:

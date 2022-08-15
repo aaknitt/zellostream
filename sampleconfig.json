@@ -6,11 +6,17 @@
     "vox_silence_time": 2,
     "audio_threshold": 700,
     "input_device_index": 0,
+    "input_pulse_name": "alsa_output.pci-0000_00_1f.3.analog-stereo.monitor",
+    "output_device_index": 15,
+    "output_pulse_name": "fcdv1op",
+    "zello_input_sample_rate": 16000,
+    "audio_input_sample_rate": 48000,
+    "in_channel_config": "left",
+    "audio_input_channels": 1,
+    "audio_output_sample_rate": 48000,
+    "audio_output_channels": 2,
+    "audio_output_volume": 1.5,
     "TGID_in_stream": true,
     "TGID_to_play": 58917,
-    "UDP_PORT": 9123,
-    "audio_sample_rate": 8000,
-    "audio_channels": 1,
-    "zello_sample_rate": 16000,
-    "in_channel_config": "left"
+    "UDP_PORT": 9123
 }
