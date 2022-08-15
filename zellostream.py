@@ -342,6 +342,65 @@ def bytes_to_uint32(bytes):
     return bytes[0]*(1<<24) + bytes[1]*(1<<16) + bytes[2]*(1<<8) + bytes[3]
 
 
+def stream_to_zello(config, zello_ws, audio_input_stream, data):
+    try:
+        stream_id = start_stream(config, zello_ws)
+        if not stream_id:
+            print("stream_to_zello: cannot start stream")
+            time.sleep(1)
+            return stream_id
+        print(f"stream_to_zello: sending to stream_id {stream_id}")
+        enc = create_encoder(config)
+        zello_chunk = int(config["zello_input_sample_rate"] * 0.06)
+        packet_id = 0  # packet ID is only used in server to client - populate with zeros for client to server direction
+        quiet_samples = 0
+        timer = time.time()
+        while quiet_samples < (config["vox_silence_time"] * (1 / 0.06)):
+            if time.time() - timer > 30:
+                print("stream_to_zello: timer break")
+                stop_stream(zello_ws, stream_id)
+                stream_id = start_stream(config, zello_ws)
+                if not stream_id:
+                    print("stream_to_zello: cannot start stream")
+                    break
+                timer = time.time()
+            if len(data) > 0:
+                data2 = data.tobytes()
+                out = opuslib.api.encoder.encode(enc, data2, zello_chunk, len(data2) * 2)
+                send_data = bytearray(np.array([1]).astype(">u1").tobytes())
+                send_data = send_data + np.array([stream_id]).astype(">u4").tobytes()
+                send_data = send_data + np.array([packet_id]).astype(">u4").tobytes()
+                send_data = send_data + out
+                try:
+                    nbytes = zello_ws.send_binary(send_data)
+                    if nbytes == 0:
+                        print("stream_to_zello: binary send error")
+                        break
+                except Exception as ex:
+                    print(f"stream_to_zello: Zello error {ex}")
+                    break
+            if config["audio_source"] == "sound_card":
+                data = record_chunk(config, audio_input_stream, channel=config["in_channel_config"])
+            elif config["audio_source"] == "UDP":
+                data = get_udp_audio(config,seconds=0.06, channel=config["in_channel_config"])
+            else:
+                data = np.frombuffer(b'',dtype=np.short)
+            if len(data) > 0:
+                max_audio_level = max(abs(data))
+            else:
+                max_audio_level = 0
+            if len(data) == 0 or max_audio_level < config["audio_threshold"]:
+                quiet_samples = quiet_samples + 1
+            else:
+                quiet_samples = 0
+        print("stream_to_zello: done sending audio")
+        if stream_id:
+            stop_stream(zello_ws, stream_id)
+            stream_id = None
+    finally:
+        return stream_id
+
+
 def stream_from_zello(config, zello_ws, audio_output_stream, start_data):
     if "codec_header" not in start_data:
         return
@@ -437,56 +496,7 @@ def main():
                         time.sleep(1)
                         continue
                 zello_ws.settimeout(1)
-                stream_id = start_stream(config, zello_ws)
-                if not stream_id:
-                    print("Cannot start stream")
-                    time.sleep(1)
-                    continue
-                print("sending to stream_id " + str(stream_id))
-                packet_id = 0  # packet ID is only used in server to client - populate with zeros for client to server direction
-                quiet_samples = 0
-                timer = time.time()
-                while quiet_samples < (config["vox_silence_time"] * (1 / 0.06)):
-                    if time.time() - timer > 30:
-                        print("Timer break")
-                        stop_stream(zello_ws, stream_id)
-                        stream_id = start_stream(config, zello_ws)
-                        if not stream_id:
-                            print("Cannot start stream")
-                            break
-                        timer = time.time()
-                    if len(data) > 0:
-                        data2 = data.tobytes()
-                        out = opuslib.api.encoder.encode(enc, data2, zello_chunk, len(data2) * 2)
-                        send_data = bytearray(np.array([1]).astype(">u1").tobytes())
-                        send_data = send_data + np.array([stream_id]).astype(">u4").tobytes()
-                        send_data = send_data + np.array([packet_id]).astype(">u4").tobytes()
-                        send_data = send_data + out
-                        try:
-                            nbytes = zello_ws.send_binary(send_data)
-                            if nbytes == 0:
-                                print("Binary send error")
-                                break
-                        except Exception as ex:
-                            print(f"Zello error {ex}")
-                            break
-                    if config["audio_source"] == "sound_card":
-                        data = record_chunk(config, audio_input_stream, channel=config["in_channel_config"])
-                    elif config["audio_source"] == "UDP":
-                        data = get_udp_audio(config,seconds=0.06, channel=config["in_channel_config"])
-                    else:
-                        data = np.frombuffer(b'',dtype=np.short)
-                    if len(data) > 0:
-                        max_audio_level = max(abs(data))
-                    else:
-                        max_audio_level = 0
-                    if len(data) == 0 or max_audio_level < config["audio_threshold"]:
-                        quiet_samples = quiet_samples + 1
-                    else:
-                        quiet_samples = 0
-                print("Done sending audio")
-                stop_stream(zello_ws, stream_id)
-                stream_id = None
+                stream_id = stream_to_zello(config, zello_ws, audio_input_stream, data)
             else: # Monitor channel for incoming traffic
                 if not zello_ws or not zello_ws.connected:
                     zello_ws = create_zello_connection(config)
