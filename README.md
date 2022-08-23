@@ -22,10 +22,11 @@ For Zello consumer network:
 - issuer:  Issuer credential from Zello account (see above)
 - vox_silence_time:  Time in seconds of detected silence before streaming stops. Default: 3
 - audio_threshold:  Audio detected above this level will be streamed. Default: 1000
-- input_device_index:  Index of the audio input device to use for streaming to Zello (not used in zellostreamUDP.py). Default 0
-  - Use list_devies_portaudio.py to find the right index.
-- output_device_index:  Index of the audio output device to use for streaming from Zello (not used in zellostreamUDP.py). Default 0
-  - Use list_devies_portaudio.py to find the right index.
+- audio_source: Set to "Sound Card" (default) or "UDP"
+- input_device_index:  Index of the audio input device to use for streaming when audio_source is set to "Sound Card". Use list_devices.py to find the right index. Default 0
+  - Use list_devices_portaudio.py to find the right index.
+- output_device_index:  Index of the audio output device to use for streaming from Zello. Default 0
+  - Use list_devices_portaudio.py to find the right index.
 - zello_input_sample_rate: Sample rate of the stream sent to Zello (samples per seconds). Default: 16000
 - audio_input_sample_rate: Sample rate of the audio device (samples per seconds). Default: 48000
 - audio_input_channels: Number of audio channels in the device. 1 for mono, 2 for stereo. Default 1
@@ -41,9 +42,9 @@ For Zello consumer network:
 - ptt_off_command: Optional command to execute to turn host PTT off when audio from Zello has finished. It is in the form of a list of command followed by its arguments
 - ptt_off_delay: Delay in seconds applied before sending the PTT off command. Covers possible delay to play the stream entirely. Default 2 seconds.
 - logging_level: Set Python logging module to this level. Can be "critial", "error", "warning", "info" or "debug". Default "warning".
-- TGID_in_stream: When true, a four-byte talkgroup ID is expected prior to the audio data in each incoming UDP packet and only the talkgroup specified in TGID_to_play will be streamed.  Default is false.  (only used in zellostreamUDP.py).
-- TGID_to_play: When TGID_in_stream is set to true, the integer in this field specifies which talkgroup ID will be streamed (only used in zellostreamUDP.py). Default 70000
-- UDP_PORT: UDP port to listen for oncompressed PCM audio on.  Audio received on this port will be compressed and streamed to Zello (only used in zeelostreamUDP.py). Default 9123
+- TGID_in_stream: Only used when audio_source is set to "UDP". When true, a four-byte talkgroup ID is expected prior to the audio data in each incoming UDP packet and only the talkgroup specified in TGID_to_play will be streamed.  Default is false.
+- TGID_to_play: Only used when audio_source is set to "UDP". When TGID_in_stream is set to true, the integer in this field specifies which talkgroup ID will be streamed. Default 70000
+- UDP_PORT: Only used when audio_source is set to "UDP". UDP port to listen for oncompressed PCM audio on.  Audio received on this port will be compressed and streamed to Zello. Default 9123
 
 ## Dependencies
 On Windows, requires these DLL files in the same directory:

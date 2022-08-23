@@ -13,6 +13,7 @@ from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
 import base64
 from threading import Thread,Lock
+import traceback
 
 logging.basicConfig(format='%(asctime)s %(levelname).1s %(funcName)s: %(message)s', level=logging.INFO)
 LOG = logging.getLogger('Zellostream')
@@ -75,7 +76,7 @@ def get_config():
 	config["audio_output_channels"] = configdata.get("audio_output_channels", 1)
 	config["audio_output_volume"] = configdata.get("audio_output_volume", 1)
 	config["in_channel_config"] = configdata.get("in_channel", "mono")
-	config["audio_source"] = configdata.get("audio_source","sound_card")
+	config["audio_source"] = configdata.get("audio_source","Sound Card")
 	config["ptt_on_command"] = configdata.get("ptt_on_command")
 	config["ptt_off_command"] = configdata.get("ptt_off_command")
 	config["ptt_off_delay"] =  configdata.get("ptt_off_delay", 2)
@@ -84,6 +85,8 @@ def get_config():
 	config["udp_port"] = configdata.get("UDP_PORT",9123)
 	config["tgid_in_stream"] = configdata.get("TGID_in_stream",False)
 	config["tgid_to_play"] = configdata.get("TGID_to_play",70000)
+	config["audio_sample_rate"] = configdata.get("audio_sample_rate", 48000)
+	config["zello_sample_rate"] = configdata.get("zello_sample_rate", 16000)
 	return config
 
 
@@ -105,7 +108,6 @@ def EscapeAll(inbytes):
 		return inbytes
 	else:
 		return "b'{}'".format("".join("\\x{:02x}".format(b) for b in inbytes))
-
 
 def get_default_input_audio_index(config, p):
 	info = p.get_host_api_info_by_index(0)
@@ -245,14 +247,19 @@ def udp_rx(sock,config):
 
 def get_udp_audio(config,seconds,channel="mono"):
 	global udpdata,udp_buffer_lock
-	num_bytes = int(seconds*config["audio_input_sample_rate"]*2)  #.06 seconds * 8000 samples per second * 2 bytes per sample => 960 bytes per 60 ms
+	num_bytes = int(seconds*config["audio_sample_rate"]*2)  #.06 seconds * 8000 samples per second * 2 bytes per sample => 960 bytes per 60 ms
 	if channel != "mono":
 		num_bytes = num_bytes *2
-	with udp_buffer_lock:
+	with udp_buffer_lock: 
+		#print(udpdata[:num_bytes])
 		data = np.frombuffer(udpdata[:num_bytes], dtype=np.short)
-		udpdata = udpdata[num_bytes:]
-	if config["audio_input_sample_rate"] != config["zello_input_sample_rate"]:
-		zello_data = librosa.resample(data.astype(np.float32), orig_sr=config["audio_input_sample_rate"], target_sr=config["zello_input_sample_rate"]).astype(np.short)
+		if len(data) == num_bytes/2:
+			udpdata = udpdata[num_bytes:]
+			print("getting audio udpdata length is ",len(udpdata))
+		else:
+			data = b''
+	if len(data) > 0 and config["audio_sample_rate"] != config["zello_sample_rate"]:
+		zello_data = librosa.resample(data.astype(np.float32), orig_sr=config["audio_sample_rate"], target_sr=config["zello_sample_rate"]).astype(np.short)
 	else:
 		zello_data = data
 	if channel == "left":
@@ -413,7 +420,7 @@ def stream_to_zello(config, zello_ws, audio_input_stream, data):
 				except Exception as ex:
 					LOG.error("Zello error %s", ex)
 					break
-			if config["audio_source"] == "sound_card":
+			if config["audio_source"] == "Sound Card":
 				data = record_chunk(config, audio_input_stream, channel=config["in_channel_config"])
 			elif config["audio_source"] == "UDP":
 				data = get_udp_audio(config,seconds=0.06, channel=config["in_channel_config"])
@@ -497,11 +504,13 @@ def main():
 	except ConfigException as ex:
 		LOG.critical("configuration error: %s", ex)
 		sys.exit(1)
-
+	
 	log_level = logging.getLevelName(config["logging_level"].upper())
 	LOG.setLevel(log_level)
-
-	if config["audio_source"] == "sound_card":
+	
+	zello_chunk = int(config["zello_sample_rate"] * 0.06)
+	
+	if config["audio_source"] == "Sound Card":
 		LOG.debug("start PyAudio")
 		p = pyaudio.PyAudio()
 		LOG.debug("started PyAudio")
@@ -518,9 +527,11 @@ def main():
 	else:
 		LOG.warning("Invalid Audio Source")
 
+	enc = create_encoder(config)
+
 	while processing:
 		try:
-			if config["audio_source"] == "sound_card":
+			if config["audio_source"] == "Sound Card":
 				data = record_chunk(config, audio_input_stream, channel=config["in_channel_config"])
 			elif config["audio_source"] == "UDP":
 				data = get_udp_audio(config,seconds=0.06, channel=config["in_channel_config"])
@@ -530,16 +541,67 @@ def main():
 				max_audio_level = max(abs(data))
 			else:
 				max_audio_level = 0
+				time.sleep(.06)
 			if len(data) > 0 and max_audio_level > config["audio_threshold"]: # Start sending to channel
-				LOG.info("audio on")
+				print("Audio on")
 				if not zello_ws or not zello_ws.connected:
 					zello_ws = create_zello_connection(config)
 					if not zello_ws:
-						LOG.warning("cannot establish connection")
+						print("Cannot establish connection")
 						time.sleep(1)
 						continue
 				zello_ws.settimeout(1)
-				stream_id = stream_to_zello(config, zello_ws, audio_input_stream, data)
+				stream_id = start_stream(config, zello_ws)
+				if not stream_id:
+					print("Cannot start stream")
+					time.sleep(1)
+					continue
+				print("sending to stream_id " + str(stream_id))
+				packet_id = 0  # packet ID is only used in server to client - populate with zeros for client to server direction
+				quiet_samples = 0
+				timer = time.time()
+				while quiet_samples < (config["vox_silence_time"] * (1 / 0.06)):
+					if time.time() - timer > 30:
+						print("Timer break")
+						stop_stream(zello_ws, stream_id)
+						stream_id = start_stream(config, zello_ws)
+						if not stream_id:
+							print("Cannot start stream")
+							break
+						timer = time.time()
+					if len(data) > 0:
+						data2 = data.tobytes()
+						out = opuslib.api.encoder.encode(enc, data2, zello_chunk, len(data2) * 2)
+						send_data = bytearray(np.array([1]).astype(">u1").tobytes())
+						send_data = send_data + np.array([stream_id]).astype(">u4").tobytes()
+						send_data = send_data + np.array([packet_id]).astype(">u4").tobytes()
+						send_data = send_data + out
+						try:
+							nbytes = zello_ws.send_binary(send_data)
+							if nbytes == 0:
+								print("Binary send error")
+								break
+						except Exception as ex:
+							print(f"Zello error {ex}")
+							break
+					if config["audio_source"] == "Sound Card":
+						data = record(config, audio_stream, seconds=0.06, channel=config["in_channel_config"])
+					elif config["audio_source"] == "UDP":
+						data = get_udp_audio(config,seconds=0.06, channel=config["in_channel_config"])
+					else:
+						data = np.frombuffer(b'',dtype=np.short)
+					if len(data) > 0:
+						max_audio_level = max(abs(data))
+					else:
+						max_audio_level = 0
+						time.sleep(.06)
+					if len(data) == 0 or max_audio_level < config["audio_threshold"]:
+						quiet_samples = quiet_samples + 1
+					else:
+						quiet_samples = 0
+				print("Done sending audio")
+				stop_stream(zello_ws, stream_id)
+				stream_id = None
 			else: # Monitor channel for incoming traffic
 				if not zello_ws or not zello_ws.connected:
 					zello_ws = create_zello_connection(config)
@@ -568,15 +630,13 @@ def main():
 	LOG.info("terminating")
 	if zello_ws:
 		zello_ws.close()
-	if config["audio_source"] == "sound_card":
+	if config["audio_source"] == "Sound Card":
 		audio_input_stream.close()
 		audio_output_stream.close()
 		p.terminate()
 	elif config["audio_source"] == "UDP":
 		time.sleep(1)
 		UDPSock.close()
-
-
 
 if __name__ == "__main__":
 	main()
