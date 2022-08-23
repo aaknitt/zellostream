@@ -322,6 +322,7 @@ def main():
 				max_audio_level = max(abs(data))
 			else:
 				max_audio_level = 0
+				time.sleep(.06)
 			if len(data) > 0 and max_audio_level > config["audio_threshold"]: # Start sending to channel
 				print("Audio on")
 				if not zello_ws or not zello_ws.connected:
