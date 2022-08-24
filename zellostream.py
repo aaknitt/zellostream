@@ -6,7 +6,7 @@ import json
 import time
 import logging
 import pyaudio
-import numpy as np
+from numpy import frombuffer, array, repeat, short, float32
 import opuslib
 from Crypto.PublicKey import RSA
 from Crypto.Signature import pkcs1_15
@@ -88,6 +88,7 @@ def get_config():
 	config["tgid_to_play"] = configdata.get("TGID_to_play",70000)
 	config["audio_sample_rate"] = configdata.get("audio_sample_rate", 48000)
 	config["zello_sample_rate"] = configdata.get("zello_sample_rate", 16000)
+	print(config)
 	return config
 
 
@@ -136,10 +137,10 @@ def start_audio(config, p):
 	audio_chunk = int(config["audio_input_sample_rate"] * 0.06)  # 60ms = 960 samples @ 16000 S/s
 	format = pyaudio.paInt16
 	LOG.debug("open audio")
-	if ("input_pulse_name" in config or "output_pulse_name" in config) and os.name != 'nt': # using pulseaudio
+	if (config["input_pulse_name"] != None or config["output_pulse_name"] != None) and os.name != 'nt': # using pulseaudio
 		pulse = PulseAudioHandler()
 	# Audio input
-	if "input_pulse_name" in config and os.name != 'nt': # using pulseaudio for input
+	if config["input_pulse_name"] != None and os.name != 'nt': # using pulseaudio for input
 		input_device_index = get_default_input_audio_index(config, p) # get default device first
 	else: # use pyaudio device number
 		input_device_index = config["input_device_index"]
@@ -152,7 +153,8 @@ def start_audio(config, p):
 		input_device_index=input_device_index,
 	)
 	LOG.debug("audio input opened")
-	if "input_pulse_name" in config and os.name != 'nt': # redirect input to zellostream with pulseaudio
+	if config["input_pulse_name"] != None and os.name != 'nt': # redirect input to zellostream with pulseaudio
+		LOG.error("input_pulse_name is",config["input_pulse_name"])
 		pulse_source_index = pulse.get_source_index(config["input_pulse_name"])
 		pulse_source_output_index = pulse.get_own_source_output_index()
 		if pulse_source_index is None or pulse_source_output_index is None:
@@ -172,7 +174,7 @@ def start_audio(config, p):
 			except Exception as ex:
 				LOG.error("exception assigning pulseaudio source: %s", ex)
 	# Audio outpput
-	if "output_pulse_name" in config and os.name != 'nt': # using pulseaudio for output
+	if config["output_pulse_name"] != None and os.name != 'nt': # using pulseaudio for output
 		output_device_index = get_default_output_audio_index(config, p)
 	else: # use pyaudio device number
 		output_device_index = config["output_device_index"]
@@ -185,7 +187,8 @@ def start_audio(config, p):
 		output_device_index=output_device_index,
 	)
 	LOG.debug("audio output opened")
-	if "output_pulse_name" in config and os.name != 'nt': # redirect output from zellostream with pulseaudio
+	if config["output_pulse_name"] != None and os.name != 'nt': # redirect output from zellostream with pulseaudio
+		LOG.error("output_pulse_name is",config["output_pulse_name"])
 		pulse_sink_index = pulse.get_sink_index(config["output_pulse_name"])
 		pulse_sink_input_index = pulse.get_own_sink_input_index()
 		if pulse_sink_index is None or pulse_sink_input_index is None:
@@ -212,9 +215,9 @@ def record_chunk(config, stream, channel="mono"):
 	alldata = bytearray()
 	data = stream.read(audio_chunk)
 	alldata.extend(data)
-	data = np.frombuffer(alldata, dtype=np.short)
+	data = frombuffer(alldata, dtype=short)
 	if config["audio_input_sample_rate"] != config["zello_input_sample_rate"]:
-		zello_data = librosa.resample(data.astype(np.float32), orig_sr=config["audio_input_sample_rate"], target_sr=config["zello_input_sample_rate"]).astype(np.short)
+		zello_data = librosa.resample(data.astype(float32), orig_sr=config["audio_input_sample_rate"], target_sr=config["zello_input_sample_rate"]).astype(short)
 	else:
 		zello_data = data
 	if channel == "left":
@@ -255,14 +258,14 @@ def get_udp_audio(config,seconds,channel="mono"):
 		num_bytes = num_bytes *2
 	with udp_buffer_lock: 
 		#print(udpdata[:num_bytes])
-		data = np.frombuffer(udpdata[:num_bytes], dtype=np.short)
+		data = frombuffer(udpdata[:num_bytes], dtype=short)
 		if len(data) == num_bytes/2:
 			udpdata = udpdata[num_bytes:]
 			print("getting audio udpdata length is ",len(udpdata))
 		else:
 			data = b''
 	if len(data) > 0 and config["audio_sample_rate"] != config["zello_sample_rate"]:
-		zello_data = librosa.resample(data.astype(np.float32), orig_sr=config["audio_sample_rate"], target_sr=config["zello_sample_rate"]).astype(np.short)
+		zello_data = librosa.resample(data.astype(float32), orig_sr=config["audio_sample_rate"], target_sr=config["zello_sample_rate"]).astype(short)
 	else:
 		zello_data = data
 	if channel == "left":
@@ -411,9 +414,9 @@ def stream_to_zello(config, zello_ws, audio_input_stream, data):
 			if len(data) > 0:
 				data2 = data.tobytes()
 				out = opuslib.api.encoder.encode(enc, data2, zello_chunk, len(data2) * 2)
-				send_data = bytearray(np.array([1]).astype(">u1").tobytes())
-				send_data = send_data + np.array([stream_id]).astype(">u4").tobytes()
-				send_data = send_data + np.array([packet_id]).astype(">u4").tobytes()
+				send_data = bytearray(array([1]).astype(">u1").tobytes())
+				send_data = send_data + array([stream_id]).astype(">u4").tobytes()
+				send_data = send_data + array([packet_id]).astype(">u4").tobytes()
 				send_data = send_data + out
 				try:
 					nbytes = zello_ws.send_binary(send_data)
@@ -428,7 +431,7 @@ def stream_to_zello(config, zello_ws, audio_input_stream, data):
 			elif config["audio_source"] == "UDP":
 				data = get_udp_audio(config,seconds=0.06, channel=config["in_channel_config"])
 			else:
-				data = np.frombuffer(b'',dtype=np.short)
+				data = frombuffer(b'',dtype=short)
 			if len(data) > 0:
 				max_audio_level = max(abs(data))
 			else:
@@ -477,12 +480,12 @@ def stream_from_zello(config, zello_ws, audio_output_stream, start_data):
 					audio = opuslib.api.decoder.decode(dec, data, data_length, zello_chunk, False, 1)
 					# print(f"stream_from_zello: audio length: {len(audio)}")
 					vol_adjust = config["audio_output_volume"] / config["audio_output_channels"]
-					np_audio = np.repeat(np.frombuffer(audio, dtype=np.short), config["audio_output_channels"]) * vol_adjust
+					np_audio = repeat(frombuffer(audio, dtype=short), config["audio_output_channels"]) * vol_adjust
 					if sample_rate != config["audio_output_sample_rate"]:
-						audio_out = librosa.resample(np_audio.astype(np.float32), orig_sr=sample_rate, target_sr=config["audio_output_sample_rate"]).astype(np.short)
+						audio_out = librosa.resample(np_audio.astype(float32), orig_sr=sample_rate, target_sr=config["audio_output_sample_rate"]).astype(short)
 						audio_output_stream.write(audio_out.tobytes())
 					else:
-						audio_output_stream.write(np_audio.astype(np.short).toBytes())
+						audio_output_stream.write(np_audio.astype(short).toBytes())
 			else:
 				LOG.info("end of bytes stream")
 				if config["ptt_command_support"]:
@@ -539,7 +542,7 @@ def main():
 			elif config["audio_source"] == "UDP":
 				data = get_udp_audio(config,seconds=0.06, channel=config["in_channel_config"])
 			else:
-				data = np.frombuffer(b'',dtype=np.short)
+				data = frombuffer(b'',dtype=short)
 			if len(data) > 0:
 				max_audio_level = max(abs(data))
 			else:
@@ -575,9 +578,9 @@ def main():
 					if len(data) > 0:
 						data2 = data.tobytes()
 						out = opuslib.api.encoder.encode(enc, data2, zello_chunk, len(data2) * 2)
-						send_data = bytearray(np.array([1]).astype(">u1").tobytes())
-						send_data = send_data + np.array([stream_id]).astype(">u4").tobytes()
-						send_data = send_data + np.array([packet_id]).astype(">u4").tobytes()
+						send_data = bytearray(array([1]).astype(">u1").tobytes())
+						send_data = send_data + array([stream_id]).astype(">u4").tobytes()
+						send_data = send_data + array([packet_id]).astype(">u4").tobytes()
 						send_data = send_data + out
 						try:
 							nbytes = zello_ws.send_binary(send_data)
@@ -592,7 +595,7 @@ def main():
 					elif config["audio_source"] == "UDP":
 						data = get_udp_audio(config,seconds=0.06, channel=config["in_channel_config"])
 					else:
-						data = np.frombuffer(b'',dtype=np.short)
+						data = frombuffer(b'',dtype=short)
 					if len(data) > 0:
 						max_audio_level = max(abs(data))
 					else:
