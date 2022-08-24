@@ -14,15 +14,16 @@ from Crypto.Hash import SHA256
 import base64
 from threading import Thread,Lock
 import traceback
+import os
+import librosa
 
 logging.basicConfig(format='%(asctime)s %(levelname).1s %(funcName)s: %(message)s', level=logging.INFO)
 LOG = logging.getLogger('Zellostream')
 
-LOG.info("Importing librosa...")
-import librosa
-LOG.info("Imported librosa")
 
-from pulseaudio import PulseAudioHandler
+
+if os.name != 'nt':  #'nt' is Windows
+	from pulseaudio import PulseAudioHandler
 
 """On Windows, requires these DLL files in the same directory:
 opus.dll (renamed from libopus-0.dll)
@@ -135,10 +136,10 @@ def start_audio(config, p):
 	audio_chunk = int(config["audio_input_sample_rate"] * 0.06)  # 60ms = 960 samples @ 16000 S/s
 	format = pyaudio.paInt16
 	LOG.debug("open audio")
-	if "input_pulse_name" in config or "output_pulse_name" in config: # using pulseaudio
+	if ("input_pulse_name" in config or "output_pulse_name" in config) and os.name != 'nt': # using pulseaudio
 		pulse = PulseAudioHandler()
 	# Audio input
-	if "input_pulse_name" in config: # using pulseaudio for input
+	if "input_pulse_name" in config and os.name != 'nt': # using pulseaudio for input
 		input_device_index = get_default_input_audio_index(config, p) # get default device first
 	else: # use pyaudio device number
 		input_device_index = config["input_device_index"]
@@ -151,7 +152,7 @@ def start_audio(config, p):
 		input_device_index=input_device_index,
 	)
 	LOG.debug("audio input opened")
-	if "input_pulse_name" in config: # redirect input to zellostream with pulseaudio
+	if "input_pulse_name" in config and os.name != 'nt': # redirect input to zellostream with pulseaudio
 		pulse_source_index = pulse.get_source_index(config["input_pulse_name"])
 		pulse_source_output_index = pulse.get_own_source_output_index()
 		if pulse_source_index is None or pulse_source_output_index is None:
@@ -171,7 +172,7 @@ def start_audio(config, p):
 			except Exception as ex:
 				LOG.error("exception assigning pulseaudio source: %s", ex)
 	# Audio outpput
-	if "output_pulse_name" in config: # using pulseaudio for output
+	if "output_pulse_name" in config and os.name != 'nt': # using pulseaudio for output
 		output_device_index = get_default_output_audio_index(config, p)
 	else: # use pyaudio device number
 		output_device_index = config["output_device_index"]
@@ -184,7 +185,7 @@ def start_audio(config, p):
 		output_device_index=output_device_index,
 	)
 	LOG.debug("audio output opened")
-	if "output_pulse_name" in config: # redirect output from zellostream with pulseaudio
+	if "output_pulse_name" in config and os.name != 'nt': # redirect output from zellostream with pulseaudio
 		pulse_sink_index = pulse.get_sink_index(config["output_pulse_name"])
 		pulse_sink_input_index = pulse.get_own_sink_input_index()
 		if pulse_sink_index is None or pulse_sink_input_index is None:
@@ -231,15 +232,17 @@ def udp_rx(sock,config):
 	while processing:
 		try:
 			newdata,addr = sock.recvfrom(4096)
-			if config['TGID_in_stream']:
-				tgid = int.from_bytes(newdata[0:4],"little")
-				LOG.debug("got %d bytes from %s for THID %d", len(newdata), addr, tgid)
-				if tgid == config['TGID_to_play']:
-					newdata = newdata[4:]
-				else:
-					newdata = b''
+			if config['tgid_in_stream']:
+				if len(newdata) > 0:
+					tgid = int.from_bytes(newdata[0:4],"little")
+					LOG.debug("got %d bytes from %s for TGID %d", len(newdata), addr, tgid)
+					if tgid == config['tgid_to_play']:
+						newdata = newdata[4:]
+					else:
+						newdata = b''
 			else:
-				LOG.debug("got %d bytes frim %s", len(newdata), addr)
+				if len(newdata) > 0:
+					LOG.debug("got %d bytes frim %s", len(newdata), addr)
 			with udp_buffer_lock:
 				udpdata = udpdata + newdata
 		except socket.timeout:
@@ -585,7 +588,7 @@ def main():
 							print(f"Zello error {ex}")
 							break
 					if config["audio_source"] == "Sound Card":
-						data = record(config, audio_stream, seconds=0.06, channel=config["in_channel_config"])
+						data = record_chunk(config, audio_input_stream, channel=config["in_channel_config"])
 					elif config["audio_source"] == "UDP":
 						data = get_udp_audio(config,seconds=0.06, channel=config["in_channel_config"])
 					else:
