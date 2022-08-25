@@ -88,7 +88,6 @@ def get_config():
 	config["tgid_to_play"] = configdata.get("TGID_to_play",70000)
 	config["audio_sample_rate"] = configdata.get("audio_sample_rate", 48000)
 	config["zello_sample_rate"] = configdata.get("zello_sample_rate", 16000)
-	print(config)
 	return config
 
 
@@ -154,7 +153,7 @@ def start_audio(config, p):
 	)
 	LOG.debug("audio input opened")
 	if config["input_pulse_name"] != None and os.name != 'nt': # redirect input to zellostream with pulseaudio
-		LOG.error("input_pulse_name is",config["input_pulse_name"])
+		LOG.error("input_pulse_name is %s",config["input_pulse_name"])
 		pulse_source_index = pulse.get_source_index(config["input_pulse_name"])
 		pulse_source_output_index = pulse.get_own_source_output_index()
 		if pulse_source_index is None or pulse_source_output_index is None:
@@ -188,7 +187,7 @@ def start_audio(config, p):
 	)
 	LOG.debug("audio output opened")
 	if config["output_pulse_name"] != None and os.name != 'nt': # redirect output from zellostream with pulseaudio
-		LOG.error("output_pulse_name is",config["output_pulse_name"])
+		LOG.error("output_pulse_name is %s",config["output_pulse_name"])
 		pulse_sink_index = pulse.get_sink_index(config["output_pulse_name"])
 		pulse_sink_input_index = pulse.get_own_sink_input_index()
 		if pulse_sink_index is None or pulse_sink_input_index is None:
