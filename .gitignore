@@ -133,3 +133,6 @@ dmypy.json
 config.json
 privatekey.pem
 .dll
+core*
+venv/
+.vscode/
