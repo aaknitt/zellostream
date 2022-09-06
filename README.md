@@ -28,7 +28,7 @@ For Zello consumer network:
 - output_device_index:  Index of the audio output device to use for streaming from Zello. Default 0
   - Use list_devices_portaudio.py to find the right index.
 - zello_sample_rate: Sample rate of the stream sent to Zello (samples per seconds). Default: 16000
-- audio_input_sample_rate: Sample rate of the audio device (samples per seconds). Default: 48000
+- audio_input_sample_rate: Sample rate of the audio device or UDP stream (samples per seconds). Default: 48000 (set to 8000 or use with UDP stream from trunk-recorder)
 - audio_input_channels: Number of audio channels in the device. 1 for mono, 2 for stereo. Default 1
 - input_pulse_name: Used to re-route input from a Pulseaudio device. This is the name of the device.  Not applicable on Windows.
   - Use list_devices_pulseaudio.py to find the right device name
