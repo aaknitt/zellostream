@@ -72,7 +72,7 @@ def get_config():
 	config["output_pulse_name"] = configdata.get("output_pulse_name")
 	config["audio_input_sample_rate"] = configdata.get("audio_input_sample_rate", 48000)
 	config["audio_input_channels"] = configdata.get("audio_input_channels", 1)
-	config["zello_input_sample_rate"] = configdata.get("zello_input_sample_rate", 16000)
+	config["zello_sample_rate"] = configdata.get("zello_sample_rate", 16000)
 	config["audio_output_sample_rate"] = configdata.get("audio_output_sample_rate", 48000)
 	config["audio_output_channels"] = configdata.get("audio_output_channels", 1)
 	config["audio_output_volume"] = configdata.get("audio_output_volume", 1)
@@ -86,8 +86,6 @@ def get_config():
 	config["udp_port"] = configdata.get("UDP_PORT",9123)
 	config["tgid_in_stream"] = configdata.get("TGID_in_stream",False)
 	config["tgid_to_play"] = configdata.get("TGID_to_play",70000)
-	config["audio_sample_rate"] = configdata.get("audio_sample_rate", 48000)
-	config["zello_sample_rate"] = configdata.get("zello_sample_rate", 16000)
 	return config
 
 
@@ -215,8 +213,8 @@ def record_chunk(config, stream, channel="mono"):
 	data = stream.read(audio_chunk)
 	alldata.extend(data)
 	data = frombuffer(alldata, dtype=short)
-	if config["audio_input_sample_rate"] != config["zello_input_sample_rate"]:
-		zello_data = librosa.resample(data.astype(float32), orig_sr=config["audio_input_sample_rate"], target_sr=config["zello_input_sample_rate"]).astype(short)
+	if config["audio_input_sample_rate"] != config["zello_sample_rate"]:
+		zello_data = librosa.resample(data.astype(float32), orig_sr=config["audio_input_sample_rate"], target_sr=config["zello_sample_rate"]).astype(short)
 	else:
 		zello_data = data
 	if channel == "left":
@@ -252,7 +250,7 @@ def udp_rx(sock,config):
 
 def get_udp_audio(config,seconds,channel="mono"):
 	global udpdata,udp_buffer_lock
-	num_bytes = int(seconds*config["audio_sample_rate"]*2)  #.06 seconds * 8000 samples per second * 2 bytes per sample => 960 bytes per 60 ms
+	num_bytes = int(seconds*config["audio_input_sample_rate"]*2)  #.06 seconds * 8000 samples per second * 2 bytes per sample => 960 bytes per 60 ms
 	if channel != "mono":
 		num_bytes = num_bytes *2
 	with udp_buffer_lock: 
@@ -263,8 +261,8 @@ def get_udp_audio(config,seconds,channel="mono"):
 			print("getting audio udpdata length is ",len(udpdata))
 		else:
 			data = b''
-	if len(data) > 0 and config["audio_sample_rate"] != config["zello_sample_rate"]:
-		zello_data = librosa.resample(data.astype(float32), orig_sr=config["audio_sample_rate"], target_sr=config["zello_sample_rate"]).astype(short)
+	if len(data) > 0 and config["audio_input_sample_rate"] != config["zello_sample_rate"]:
+		zello_data = librosa.resample(data.astype(float32), orig_sr=config["audio_input_sample_rate"], target_sr=config["zello_sample_rate"]).astype(short)
 	else:
 		zello_data = data
 	if channel == "left":
@@ -318,7 +316,7 @@ def start_stream(config, ws):
 	frames_per_packet = 1
 	packet_duration = 60
 	codec_header = base64.b64encode(
-		config["zello_input_sample_rate"].to_bytes(2, "little") + frames_per_packet.to_bytes(1, "big") + packet_duration.to_bytes(1, "big")
+		config["zello_sample_rate"].to_bytes(2, "little") + frames_per_packet.to_bytes(1, "big") + packet_duration.to_bytes(1, "big")
 	).decode()
 	send["codec_header"] = codec_header
 	send["packet_duration"] = packet_duration
@@ -369,7 +367,7 @@ def stop_stream(ws, stream_id):
 
 
 def create_encoder(config):
-	return opuslib.api.encoder.create_state(config["zello_input_sample_rate"], config["audio_input_channels"], opuslib.APPLICATION_AUDIO)
+	return opuslib.api.encoder.create_state(config["zello_sample_rate"], config["audio_input_channels"], opuslib.APPLICATION_AUDIO)
 
 
 def create_decoder(sample_rate):
@@ -397,7 +395,7 @@ def stream_to_zello(config, zello_ws, audio_input_stream, data):
 			return stream_id
 		LOG.info("sending to stream_id %d", stream_id)
 		enc = create_encoder(config)
-		zello_chunk = int(config["zello_input_sample_rate"] * 0.06)
+		zello_chunk = int(config["zello_sample_rate"] * 0.06)
 		packet_id = 0  # packet ID is only used in server to client - populate with zeros for client to server direction
 		quiet_samples = 0
 		timer = time.time()
