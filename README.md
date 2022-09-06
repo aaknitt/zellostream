@@ -27,7 +27,7 @@ For Zello consumer network:
   - Use list_devices_portaudio.py to find the right index.
 - output_device_index:  Index of the audio output device to use for streaming from Zello. Default 0
   - Use list_devices_portaudio.py to find the right index.
-- zello_input_sample_rate: Sample rate of the stream sent to Zello (samples per seconds). Default: 16000
+- zello_sample_rate: Sample rate of the stream sent to Zello (samples per seconds). Default: 16000
 - audio_input_sample_rate: Sample rate of the audio device (samples per seconds). Default: 48000
 - audio_input_channels: Number of audio channels in the device. 1 for mono, 2 for stereo. Default 1
 - input_pulse_name: Used to re-route input from a Pulseaudio device. This is the name of the device.  Not applicable on Windows.
@@ -37,7 +37,6 @@ For Zello consumer network:
 - audio_output_channels: Number of audio channels in the output device. 1 for mono, 2 for stereo. Default 1
 - output_pulse_name: Used to re-route output to a Pulseaudio device. This is the name of the device.  Not applicable on Windows.
   - Use list_devices_pulseaudio.py to find the right device name
-- audio_source: Choose between "sound_card" and "UDP". Default "sound_card"
 - ptt_on_command: Optional command to execute to turn host PTT on when receiving audio from Zello. It is in the form of a list of command followed by its arguments
 - ptt_off_command: Optional command to execute to turn host PTT off when audio from Zello has finished. It is in the form of a list of command followed by its arguments
 - ptt_off_delay: Delay in seconds applied before sending the PTT off command. Covers possible delay to play the stream entirely. Default 2 seconds.
