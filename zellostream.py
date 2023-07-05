@@ -86,6 +86,12 @@ def get_config():
 	config["udp_port"] = configdata.get("UDP_PORT",9123)
 	config["tgid_in_stream"] = configdata.get("TGID_in_stream",False)
 	config["tgid_to_play"] = configdata.get("TGID_to_play",70000)
+	zello_work = configdata.get("zello_work_account_name")
+	if zello_work:
+		config["zello_ws_url"] = "wss://zellowork.io/ws/" + zello_work
+	else:
+		config["zello_ws_url"] = "wss://zello.io/ws"
+
 	return config
 
 
@@ -277,7 +283,7 @@ def get_udp_audio(config,seconds,channel="mono"):
 
 def create_zello_connection(config):
 	try:
-		ws = websocket.create_connection("wss://zello.io/ws")
+		ws = websocket.create_connection(config["zello_ws_url"])
 		ws.settimeout(1)
 		global seq_num
 		seq_num = 1

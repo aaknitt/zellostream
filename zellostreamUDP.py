@@ -74,7 +74,12 @@ try:
 	audio_sample_rate = configdata['audio_sample_rate']
 except:
 	audio_sample_rate = 8000
-	
+try:
+	zello_ws_url = "wss://zellowork.io/ws/" + configdata['zello_work_account_name']
+except:
+	zello_ws_url = "wss://zello.io/ws"
+print("Zello URL is ", zello_ws_url)
+
 # Set up a UDP server to receive audio from trunk-recorder
 UDPSock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
 UDPSock.settimeout(.5)
@@ -102,7 +107,7 @@ def EscapeAll(inbytes):
 
 seq_num = 0
 def create_zello_connection():
-	ws = websocket.create_connection("wss://zello.io/ws")
+	ws = websocket.create_connection(zello_ws_url)
 	ws.settimeout(1)
 	global seq_num
 	seq_num = 1
