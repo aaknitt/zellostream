@@ -219,18 +219,17 @@ def record_chunk(config, stream, channel="mono"):
 	data = stream.read(audio_chunk)
 	alldata.extend(data)
 	data = frombuffer(alldata, dtype=short)
-	if config["audio_input_sample_rate"] != config["zello_sample_rate"]:
-		zello_data = librosa.resample(data.astype(float32), orig_sr=config["audio_input_sample_rate"], target_sr=config["zello_sample_rate"]).astype(short)
+	
+	if channel == "left":
+		zello_data = data[0::2]
+	elif channel == "right":
+		zello_data = data[1::2]
+	elif channel == "mix":
+		zello_data = (data[0::2] + data[1::2]) / 2
 	else:
 		zello_data = data
-	if channel == "left":
-		zello_data = zello_data[0::2]
-	elif channel == "right":
-		zello_data = zello_data[1::2]
-	elif channel == "mix":
-		zello_data = (zello_data[0::2] + zello_data[1::2]) / 2
-	else:
-		zello_data = zello_data
+	if config["audio_input_sample_rate"] != config["zello_sample_rate"]:
+		zello_data = librosa.resample(zello_data.astype(float32), orig_sr=config["audio_input_sample_rate"], target_sr=config["zello_sample_rate"]).astype(short)
 	return zello_data
 
 def udp_rx(sock,config):
@@ -268,17 +267,15 @@ def get_udp_audio(config,seconds,channel="mono"):
 		else:
 			data = b''
 	if channel == "left":
-		zello_data = zello_data[0::2]
+		zello_data = data[0::2]
 	elif channel == "right":
-		zello_data = zello_data[1::2]
+		zello_data = data[1::2]
 	elif channel == "mix":
-		zello_data = (zello_data[0::2] + zello_data[1::2]) / 2
-	else:
-		zello_data = zello_data
-	if len(data) > 0 and config["audio_input_sample_rate"] != config["zello_sample_rate"]:
-		zello_data = librosa.resample(data.astype(float32), orig_sr=config["audio_input_sample_rate"], target_sr=config["zello_sample_rate"]).astype(short)
+		zello_data = (data[0::2] + data[1::2]) / 2
 	else:
 		zello_data = data
+	if len(zello_data) > 0 and config["audio_input_sample_rate"] != config["zello_sample_rate"]:
+		zello_data = librosa.resample(zello_data.astype(float32), orig_sr=config["audio_input_sample_rate"], target_sr=config["zello_sample_rate"]).astype(short)
 	return zello_data
 
 def create_zello_connection(config):
