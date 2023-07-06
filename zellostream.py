@@ -248,7 +248,7 @@ def udp_rx(sock,config):
 						newdata = b''
 			else:
 				if len(newdata) > 0:
-					LOG.debug("got %d bytes frim %s", len(newdata), addr)
+					LOG.debug("got %d bytes from %s", len(newdata), addr)
 			with udp_buffer_lock:
 				udpdata = udpdata + newdata
 		except socket.timeout:
@@ -267,10 +267,6 @@ def get_udp_audio(config,seconds,channel="mono"):
 			print("getting audio udpdata length is ",len(udpdata))
 		else:
 			data = b''
-	if len(data) > 0 and config["audio_input_sample_rate"] != config["zello_sample_rate"]:
-		zello_data = librosa.resample(data.astype(float32), orig_sr=config["audio_input_sample_rate"], target_sr=config["zello_sample_rate"]).astype(short)
-	else:
-		zello_data = data
 	if channel == "left":
 		zello_data = zello_data[0::2]
 	elif channel == "right":
@@ -279,6 +275,10 @@ def get_udp_audio(config,seconds,channel="mono"):
 		zello_data = (zello_data[0::2] + zello_data[1::2]) / 2
 	else:
 		zello_data = zello_data
+	if len(data) > 0 and config["audio_input_sample_rate"] != config["zello_sample_rate"]:
+		zello_data = librosa.resample(data.astype(float32), orig_sr=config["audio_input_sample_rate"], target_sr=config["zello_sample_rate"]).astype(short)
+	else:
+		zello_data = data
 	return zello_data
 
 def create_zello_connection(config):
