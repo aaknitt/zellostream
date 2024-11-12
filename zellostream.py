@@ -41,9 +41,6 @@ class ConfigException(Exception):
 
 def get_config():
 	config = {}
-	f = open("privatekey.pem", "r")
-	config["key"] = RSA.import_key(f.read())
-	f.close()
 
 	with open("config.json") as f:
 		configdata = json.load(f)
@@ -56,10 +53,6 @@ def get_config():
 	if not password:
 		raise ConfigException("ERROR GETTING PASSWORD FROM CONFIG FILE")
 	config["password"] = password
-	issuer = configdata.get("issuer")
-	if not issuer:
-		raise ConfigException("ERROR GETTING ZELLO ISSUER ID FROM CONFIG FILE")
-	config["issuer"] = issuer
 	zello_channel = configdata.get("zello_channel")
 	if not zello_channel:
 		raise ConfigException("ERROR GETTING ZELLO CHANNEL NAME FROM CONFIG FILE")
@@ -92,6 +85,14 @@ def get_config():
 	else:
 		config["zello_ws_url"] = "wss://zello.io/ws"
 
+		issuer = configdata.get("issuer")
+		if not issuer:
+			raise ConfigException("ERROR GETTING ZELLO ISSUER ID FROM CONFIG FILE")
+		config["issuer"] = issuer
+
+		f = open("privatekey.pem", "r")
+		config["key"] = RSA.import_key(f.read())
+		f.close()
 	return config
 
 
@@ -287,8 +288,9 @@ def create_zello_connection(config):
 		send = {}
 		send["command"] = "logon"
 		send["seq"] = seq_num
-		encoded_jwt = create_zello_jwt(config)
-		send["auth_token"] = encoded_jwt.decode("utf-8")
+		if "zellowork" not in config["zello_ws_url"]:
+			encoded_jwt = create_zello_jwt(config)
+			send["auth_token"] = encoded_jwt.decode("utf-8")
 		send["username"] = config["username"]
 		send["password"] = config["password"]
 		send["channel"] = config["zello_channel"]
