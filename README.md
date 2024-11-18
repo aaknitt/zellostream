@@ -15,6 +15,9 @@ For Zello consumer network:
 - Copy the Private Key into a file called privatekey.pem that's in the same folder as the script.
 - The Issuer value goes into config.json.
 
+For Zello Work network:
+- The issuer and private key are not needed if zello_work_account_name is defined.
+
 ## config.json
 - username:  Zello account username to use for streaming
 - password:  Zello account password to use for streaming
@@ -44,7 +47,7 @@ For Zello consumer network:
 - TGID_in_stream: Only used when audio_source is set to "UDP". When true, a four-byte talkgroup ID is expected prior to the audio data in each incoming UDP packet and only the talkgroup specified in TGID_to_play will be streamed.  Default is false.
 - TGID_to_play: Only used when audio_source is set to "UDP". When TGID_in_stream is set to true, the integer in this field specifies which talkgroup ID will be streamed. Default 70000
 - UDP_PORT: Only used when audio_source is set to "UDP". UDP port to listen for oncompressed PCM audio on.  Audio received on this port will be compressed and streamed to Zello. Default 9123
-- zello_work_account_name: Use only when streaming to a ZelloWork account. Include just the zellowork subdomain name here. If you access your zello work account at https://zellostream.zellowork.com, your subdomain would just be zellowork. If left blank, the public zello network will be used.
+- zello_work_account_name: Use only when streaming to a ZelloWork account. Include just the zellowork subdomain name here. If you access your zello work account at https://zellostream.zellowork.com, your subdomain would just be zellostream. If left blank, the public zello network will be used.
 
 ## Dependencies
 ### Windows
