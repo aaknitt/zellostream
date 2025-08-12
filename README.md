@@ -54,9 +54,11 @@ For Zello Work network:
 Requires these DLL files in the same directory:
 - opus.dll (renamed from libopus-0.dll)
 - libwinpthread-1.dll
-- libgcc_s_sjlj-1.dll  
+- libgcc_s_sjlj-1.dll  (*depending on the compiling architecture)
 
 These can be obtained from the 'opusfile' download at http://opus-codec.org/downloads/
+
+*You will need to compile these DLL files from the opusfile download on your system to match the architecture. Do note that the libgcc_s_sjlj-1.dll file may be different depending on the compiling method. You can use the [Dependencies tool](https://github.com/lucasg/Dependencies/releases) to find out which DLL file Opus needs to function correctly after compiling.
 
 Requires pyaudio:
 https://people.csail.mit.edu/hubert/pyaudio/
