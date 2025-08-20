@@ -19,5 +19,7 @@
     "logging_level": "info",
     "TGID_in_stream": true,
     "TGID_to_play": 58917,
-    "UDP_PORT": 9123
+    "UDP_PORT": 9123,
+    "ptt_serial_port": "/dev/ttyUSB0",
+    "ptt_rts_invert": false
 }
