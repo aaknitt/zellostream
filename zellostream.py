@@ -579,6 +579,9 @@ def main():
 
     try:
         config = get_config()
+        # ---- PTT serial: make it explicit and visible in logs
+        LOG.debug("PTT config: port=%r, invert=%s", config.get("ptt_serial_port"), config.get("ptt_rts_invert", False))
+        config["ptt_serial_support"] = bool(config.get("ptt_serial_port"))
 
         # Open PTT serial (RTS control)
         if config.get("ptt_serial_support"):
@@ -598,6 +601,8 @@ def main():
             except Exception as ex:
                 LOG.error("Failed to open PTT serial %s: %s", config["ptt_serial_port"], ex)
                 config["ptt_serial_support"] = False
+        else:
+            LOG.debug("PTT serial disabled (no ptt_serial_port set)")
 
 
 
