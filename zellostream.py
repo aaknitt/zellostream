@@ -12,7 +12,7 @@ from Crypto.PublicKey import RSA
 from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
 import base64
-from threading import Thread, Lock
+from threading import Thread, Lock, Event
 import traceback
 import os
 import librosa
@@ -81,7 +81,11 @@ def get_config():
     config["ptt_serial_port"] = configdata.get("ptt_serial_port")  # e.g., "/dev/ttyUSB0" or "COM3"
     config["ptt_rts_invert"] = configdata.get("ptt_rts_invert", False)  # True if your interface wants RTS low for PTT
     config["ptt_serial_support"] = config["ptt_serial_port"] is not None
+    config["cor_serial_port"] = configdata.get("cor_serial_port")  # optional; when set, use CTS instead of VOX
+    config["cor_cts_invert"] = configdata.get("cor_cts_invert", False)  # invert CTS logic if needed
+    config["cor_cts_debounce_ms"] = int(configdata.get("cor_cts_debounce_ms", 30))
 
+    # Zello WS URL & auth
     zello_work = configdata.get("zello_work_account_name")
     if zello_work:
         config["zello_ws_url"] = "wss://zellowork.io/ws/" + zello_work
@@ -421,6 +425,100 @@ def set_ptt_serial(config, enabled: bool):
         LOG.error("Failed to set PTT (RTS): %s", ex)
 
 
+def open_serial_safe(port, baud=9600):
+    """Open serial without toggling RTS/DTR; immediately drive both low."""
+    ser = serial.Serial(port=port, baudrate=baud, timeout=0, rtscts=False, dsrdtr=False)
+    try:
+        ser.setRTS(False)
+        ser.setDTR(False)
+    except Exception:
+        pass
+    return ser
+
+
+def start_cor_watch(config):
+    """
+    Start a background CTS watcher.
+    - Reuses PTT serial if ports match; otherwise opens its own (safe) handle.
+    - Sets config['cor_active_event'] to an Event reflecting logical CTS (with optional inversion).
+    Returns (thread, cor_own_handle_or_None).
+    """
+    cor_port = config.get("cor_serial_port")
+    if not cor_port:
+        return None, None
+
+    # Reuse PTT handle if same port
+    if config.get("ptt_serial") and cor_port == config.get("ptt_serial_port"):
+        ser = config["ptt_serial"]
+        own_handle = None
+        LOG.info("COR will monitor CTS on existing PTT serial: %s", cor_port)
+    else:
+        try:
+            ser = open_serial_safe(cor_port, 9600)
+            own_handle = ser
+            LOG.info("Opened COR serial on %s", cor_port)
+        except Exception as ex:
+            LOG.error("Failed to open COR serial %s: %s", cor_port, ex)
+            return None, None
+
+    debounce_s = max(0, config.get("cor_cts_debounce_ms", 30)) / 1000.0
+    invert = bool(config.get("cor_cts_invert", False))
+    evt = Event()
+    config["cor_active_event"] = evt
+
+    def logical(line_state_high: bool) -> bool:
+        # CTS True means HIGH/asserted; apply inversion if requested
+        return (not line_state_high) if invert else bool(line_state_high)
+
+    def watcher():
+        last = ser.cts
+        # Initial stabilization
+        if debounce_s > 0:
+            time.sleep(debounce_s)
+        init_active = logical(ser.cts)
+        if init_active:
+            evt.set()
+        else:
+            evt.clear()
+        LOG.debug("COR initial CTS=%s -> active=%s (invert=%s)", "HIGH" if ser.cts else "LOW", evt.is_set(), invert)
+        try:
+            while True:
+                s = ser.cts
+                if s != last:
+                    # Debounce: require stability
+                    if debounce_s > 0:
+                        end = time.time() + debounce_s
+                        stable = True
+                        while time.time() < end:
+                            if ser.cts != s:
+                                stable = False
+                                break
+                            time.sleep(0.005)
+                        if not stable:
+                            last = ser.cts
+                            continue
+                    last = s
+                    if logical(s):
+                        if not evt.is_set():
+                            evt.set()
+                            LOG.debug("COR: CTS ASSERT -> TX ON")
+                    else:
+                        if evt.is_set():
+                            evt.clear()
+                            LOG.debug("COR: CTS DROP -> TX OFF")
+                time.sleep(0.01)
+        except Exception as ex:
+            LOG.error("COR watcher exception: %s", ex)
+            try:
+                evt.clear()
+            except Exception:
+                pass
+
+    th = Thread(target=watcher, name="cor_watch", daemon=True)
+    th.start()
+    return th, own_handle
+
+
 def stream_to_zello(config, zello_ws, audio_input_stream, data):
     try:
         stream_id = start_stream(config, zello_ws)
@@ -604,7 +702,11 @@ def main():
         else:
             LOG.debug("PTT serial disabled (no ptt_serial_port set)")
 
-
+        # Start COR watcher if configured
+        cor_thread = None
+        cor_own_handle = None
+        if config.get("cor_serial_port"):
+            cor_thread, cor_own_handle = start_cor_watch(config)
 
     except ConfigException as ex:
         LOG.critical("configuration error: %s", ex)
@@ -647,8 +749,17 @@ def main():
             else:
                 max_audio_level = 0
                 time.sleep(.06)
-            if len(data) > 0 and max_audio_level > config["audio_threshold"]:  # Start sending to channel
-                print("Audio on")
+
+            # Decide to start TX: COR (CTS) takes precedence over VOX when configured
+            cor_mode = bool(config.get("cor_serial_port"))
+            cor_active = bool(config.get("cor_active_event").is_set()) if cor_mode and config.get(
+                "cor_active_event") else False
+
+            should_tx = (cor_mode and cor_active) or (
+                        not cor_mode and len(data) > 0 and max_audio_level > config["audio_threshold"])
+
+            if should_tx:
+                print("COR active -> TX" if cor_mode else "Audio on")
                 if not zello_ws or not zello_ws.connected:
                     zello_ws = create_zello_connection(config)
                     if not zello_ws:
@@ -665,7 +776,9 @@ def main():
                 packet_id = 0  # packet ID is only used in server to client - populate with zeros for client to server direction
                 quiet_samples = 0
                 timer = time.time()
-                while quiet_samples < (config["vox_silence_time"] * (1 / 0.06)):
+
+                # TX loop: ends on COR drop (in COR mode) or VOX silence (in VOX mode)
+                while True:
                     if time.time() - timer > 30:
                         print("Timer break")
                         stop_stream(zello_ws, stream_id)
@@ -695,15 +808,25 @@ def main():
                         data = get_udp_audio(config, seconds=0.06, channel=config["in_channel_config"])
                     else:
                         data = frombuffer(b'', dtype=short)
-                    if len(data) > 0:
-                        max_audio_level = max(abs(data))
+
+                    if cor_mode:
+                        # End TX immediately when CTS drops (after debounce applied in watcher)
+                        if not config.get("cor_active_event").is_set():
+                            break
                     else:
-                        max_audio_level = 0
-                        time.sleep(.06)
-                    if len(data) == 0 or max_audio_level < config["audio_threshold"]:
-                        quiet_samples = quiet_samples + 1
-                    else:
-                        quiet_samples = 0
+                        # VOX logic
+                        if len(data) > 0:
+                            max_audio_level = max(abs(data))
+                        else:
+                            max_audio_level = 0
+                            time.sleep(.06)
+                        if len(data) == 0 or max_audio_level < config["audio_threshold"]:
+                            quiet_samples += 1
+                            if quiet_samples >= (config["vox_silence_time"] * (1 / 0.06)):
+                                break
+                        else:
+                            quiet_samples = 0
+
                 print("Done sending audio")
                 stop_stream(zello_ws, stream_id)
                 stream_id = None
@@ -743,6 +866,13 @@ def main():
     elif config["audio_source"] == "UDP":
         time.sleep(1)
         UDPSock.close()
+
+    # Close COR handle only if we opened an extra one (not the shared PTT handle)
+    try:
+        if 'cor_own_handle' in locals() and cor_own_handle:
+            cor_own_handle.close()
+    except Exception as ex:
+        LOG.error("Error closing COR serial: %s", ex)
 
     if config.get("ptt_serial_support") and config.get("ptt_serial"):
         try:

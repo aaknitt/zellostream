@@ -21,5 +21,8 @@
     "TGID_to_play": 58917,
     "UDP_PORT": 9123,
     "ptt_serial_port": "/dev/ttyUSB0",
-    "ptt_rts_invert": false
+    "ptt_rts_invert": false,
+    "cor_serial_port": "/dev/ttyUSB0",
+    "cor_cts_invert": false,
+    "cor_cts_debounce_ms": 30
 }
