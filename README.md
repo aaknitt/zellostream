@@ -6,7 +6,7 @@ Acquires audio from a sound card or UDP port to send to Zello.  (UDP support is 
 Create a developer account with Zello to get credentials.  Set up a different account than what you normally use for Zello, as trying to use this script with the same account that you're using on your mobile device will cause problems.
 
 For Zello consumer network:
-- Go to https://developers.zello.com/ and click Login
+- Go to [https://developers.zello.com/login](https://developers.zello.com/login)
 - Enter your Zello username and password. If you don't have Zello account download Zello app and create one.
 - Complete all fields in the developer profile and click Submit
 - Click Keys and Add Key
